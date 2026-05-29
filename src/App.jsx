@@ -85,10 +85,15 @@ export default function RutinOnline() {
 
   // Aktivasyon formu
   const [licenseInput, setLicenseInput] = useState("");
-  // Kayıt formu
   const [regForm, setRegForm] = useState({ fullName:"", email:"", password:"", confirmPassword:"" });
-  // Giriş formu
   const [loginForm, setLoginForm] = useState({ email:"", password:"" });
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [showIosInstall, setShowIosInstall] = useState(false);
+  const [faqOpen, setFaqOpen] = useState(null);
+
+  const isIos = () => /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
+  const isInStandaloneMode = () => window.matchMedia("(display-mode: standalone)").matches;
 
   useEffect(() => {
     setTimeout(() => setSplash(false), 1000);
@@ -99,7 +104,25 @@ export default function RutinOnline() {
       setLicense(parsed.license);
       setScreen(SCREENS.DASHBOARD);
     }
+    // Android PWA prompt
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      if (!isInStandaloneMode()) setShowInstallBanner(true);
+    });
+    // iOS kontrolü
+    if (isIos() && !isInStandaloneMode()) setShowInstallBanner(true);
   }, []);
+
+  const handleInstall = async () => {
+    if (isIos()) { setShowIosInstall(true); return; }
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === "accepted") setShowInstallBanner(false);
+      setDeferredPrompt(null);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -295,6 +318,31 @@ export default function RutinOnline() {
   // LANDING
   if (screen === SCREENS.LANDING) return (
     <div style={S.app}>
+      {/* iOS Install Modal */}
+      {showIosInstall && (
+        <div onClick={() => setShowIosInstall(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center", padding:16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ ...S.card, width:"100%", maxWidth:420, padding:28, textAlign:"center", borderRadius:24 }}>
+            <div style={{ fontSize:36, marginBottom:12 }}>📱</div>
+            <div style={{ fontSize:18, fontWeight:800, color:"#111", marginBottom:8 }}>Ana Ekrana Ekle</div>
+            <div style={{ fontSize:14, color:"#6B7280", lineHeight:1.8, marginBottom:20 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, background:"#F9FAFB", borderRadius:12, padding:"12px 16px", marginBottom:10, textAlign:"left" }}>
+                <span style={{ fontSize:22 }}>1️⃣</span>
+                <span>Alttaki <strong>Paylaş</strong> butonuna bas <span style={{ fontSize:18 }}>⎙</span></span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:10, background:"#F9FAFB", borderRadius:12, padding:"12px 16px", marginBottom:10, textAlign:"left" }}>
+                <span style={{ fontSize:22 }}>2️⃣</span>
+                <span><strong>"Ana Ekrana Ekle"</strong> seçeneğine bas</span>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:10, background:"#F0FDF4", borderRadius:12, padding:"12px 16px", textAlign:"left", border:"1px solid #BBF7D0" }}>
+                <span style={{ fontSize:22 }}>✅</span>
+                <span>Hazır! Uygulama telefona yüklendi.</span>
+              </div>
+            </div>
+            <button onClick={() => setShowIosInstall(false)} style={{ ...S.btn(), width:"100%", borderRadius:14, padding:"14px" }}>Anladım</button>
+          </div>
+        </div>
+      )}
+
       <nav style={S.nav}>
         <Logo size={22} textSize={16} dotSize={10} />
         <div style={{ display:"flex", gap:10 }}>
@@ -302,23 +350,160 @@ export default function RutinOnline() {
           <button onClick={() => setScreen(SCREENS.ACTIVATE)} style={{ ...S.btn(), padding:"9px 20px", fontSize:14 }}>Başla</button>
         </div>
       </nav>
-      <div style={{ maxWidth:540, margin:"0 auto", padding:"64px 24px 40px", textAlign:"center" }}>
-        <div style={{ display:"inline-block", background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:30, padding:"6px 16px", fontSize:13, color:"#16A34A", marginBottom:28, fontWeight:500 }}>🔥 12.000+ kişi rutinini oluşturdu</div>
-        <h1 style={{ fontSize:"clamp(30px,6vw,50px)", fontWeight:800, lineHeight:1.15, marginBottom:20, color:"#111" }}>Küçük alışkanlıklar,<br /><span style={{ color:"#16A34A" }}>büyük değişimler.</span></h1>
-        <p style={{ fontSize:16, color:"#6B7280", lineHeight:1.75, marginBottom:40 }}>Kendi rutinlerini oluştur, takip et, geliştir.<br />Her gün biraz daha iyi bir sen.</p>
-        <div style={{ ...S.card, marginBottom:20, background:"linear-gradient(135deg,#F0FDF4,#DCFCE7)", border:"1.5px solid #86EFAC" }}>
+
+      {/* PWA Install Banner */}
+      {showInstallBanner && (
+        <div style={{ background:"#F0FDF4", borderBottom:"1px solid #BBF7D0", padding:"12px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ fontSize:20 }}>📲</span>
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:"#16A34A" }}>Uygulamayı telefonuna yükle</div>
+              <div style={{ fontSize:12, color:"#6B7280" }}>Ana ekrandan hızlıca eriş</div>
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={handleInstall} style={{ ...S.btn(), padding:"8px 16px", fontSize:13, borderRadius:10 }}>Yükle</button>
+            <button onClick={() => setShowInstallBanner(false)} style={{ ...S.btn("transparent","#9CA3AF"), padding:"8px", fontSize:16, borderRadius:10 }}>✕</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ maxWidth:580, margin:"0 auto", padding:"56px 24px 60px" }}>
+
+        {/* Hero */}
+        <div style={{ textAlign:"center", marginBottom:48 }}>
+          <h1 style={{ fontSize:"clamp(28px,6vw,48px)", fontWeight:800, lineHeight:1.15, marginBottom:16, color:"#111" }}>
+            Küçük alışkanlıklar,<br /><span style={{ color:"#16A34A" }}>büyük değişimler.</span>
+          </h1>
+          <p style={{ fontSize:16, color:"#6B7280", lineHeight:1.75, marginBottom:32, maxWidth:440, margin:"0 auto 32px" }}>
+            Kendi günlük rutinlerini oluştur, takip et ve geliştir. Her cihazda senkronize, tek ödeme.
+          </p>
+          <div style={{ display:"flex", gap:12, justifyContent:"center", flexWrap:"wrap" }}>
+            <button onClick={() => setScreen(SCREENS.ACTIVATE)} style={{ ...S.btn(), borderRadius:14, padding:"16px 36px", fontSize:16, boxShadow:"0 4px 20px rgba(22,163,74,0.3)" }}>
+              Hemen Başla →
+            </button>
+            <button onClick={handleInstall} style={{ ...S.btn("#F0FDF4","#16A34A"), borderRadius:14, padding:"16px 24px", fontSize:15, border:"1px solid #BBF7D0" }}>
+              📲 Telefona Yükle
+            </button>
+          </div>
+        </div>
+
+        {/* Uygulama Önizleme */}
+        <div style={{ background:"linear-gradient(135deg,#F0FDF4,#DCFCE7)", borderRadius:24, padding:24, marginBottom:48, border:"1px solid #BBF7D0" }}>
+          <div style={{ fontSize:13, color:"#16A34A", fontWeight:600, textAlign:"center", marginBottom:20, letterSpacing:1, textTransform:"uppercase" }}>Uygulama Önizlemesi</div>
+          <div style={{ ...S.card, borderRadius:20, overflow:"hidden" }}>
+            {/* Fake progress bar */}
+            <div style={{ height:4, background:"#F0FDF4" }}>
+              <div style={{ width:"60%", height:"100%", background:"linear-gradient(90deg,#16A34A,#4ADE80)" }} />
+            </div>
+            <div style={{ padding:"16px 18px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:16 }}>
+                <div>
+                  <div style={{ fontSize:18, fontWeight:800, color:"#111" }}>3/5 tamamlandı</div>
+                  <div style={{ fontSize:12, color:"#9CA3AF" }}>2 rutin kaldı</div>
+                </div>
+                <div style={{ fontSize:32, fontWeight:900, color:"#16A34A" }}>60%</div>
+              </div>
+              {[["🏃","Günde 45 dk egzersiz yap",true,12],["💧","Günde 2 litre su iç",true,7],["📚","Günde 30 dk kitap oku",false,5]].map(([e,t,done,s]) => (
+                <div key={t} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", background:done?"#F0FDF4":"#FAFAFA", borderRadius:12, border:`1px solid ${done?"#BBF7D0":"#F3F4F6"}`, marginBottom:8 }}>
+                  <div style={{ width:38, height:38, borderRadius:"50%", background:done?"#DCFCE7":"#F3F4F6", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>{e}</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:done?"#16A34A":"#374151", textDecoration:done?"line-through":"none" }}>{t}</div>
+                    <div style={{ fontSize:11, color:"#F59E0B", fontWeight:600 }}>🔥 {s} gün seri</div>
+                  </div>
+                  <div style={{ width:24, height:24, borderRadius:"50%", background:done?"#16A34A":"transparent", border:`2px solid ${done?"#16A34A":"#D1D5DB"}`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    {done && <svg width="12" height="12" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Özellikler */}
+        <div style={{ marginBottom:48 }}>
+          <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:20 }}>Neden rutin.online?</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+            {[
+              ["🎯","Kendin Oluştur","Hazır rutin yok. Her şeyi kendin belirlersin."],
+              ["🔥","Seri Takibi","Günlük serini kır, motivasyonunu koru."],
+              ["📱","Her Cihazda","Telefon, tablet, bilgisayar — her yerde senkronize."],
+              ["🔔","Hatırlatıcılar","Tamamlanmayan rutinler için bildirim al."],
+              ["📊","İstatistikler","Haftalık ve aylık gelişimini takip et."],
+              ["🔒","Güvenli","Verilen bilgilerin şifreli ve güvende."],
+            ].map(([e,t,s]) => (
+              <div key={t} style={{ ...S.card }}>
+                <div style={{ fontSize:28, marginBottom:8 }}>{e}</div>
+                <div style={{ fontSize:14, fontWeight:700, color:"#111", marginBottom:4 }}>{t}</div>
+                <div style={{ fontSize:12, color:"#9CA3AF", lineHeight:1.5 }}>{s}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Fiyat */}
+        <div style={{ ...S.card, marginBottom:16, background:"linear-gradient(135deg,#F0FDF4,#DCFCE7)", border:"1.5px solid #86EFAC", textAlign:"center" }}>
           <div style={{ fontSize:13, color:"#16A34A", fontWeight:700, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>Tek Seferlik Ödeme</div>
-          <div style={{ fontSize:48, fontWeight:900, color:"#111", lineHeight:1 }}>199₺</div>
-          <div style={{ fontSize:14, color:"#6B7280", margin:"8px 0 20px" }}>1 Yıllık Tam Erişim · Sınırsız Rutin</div>
+          <div style={{ fontSize:56, fontWeight:900, color:"#111", lineHeight:1 }}>199₺</div>
+          <div style={{ fontSize:14, color:"#6B7280", margin:"8px 0 4px" }}>1 Yıllık Tam Erişim</div>
+          <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:24 }}>Abonelik yok · Otomatik ücret yok</div>
           <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:24, textAlign:"left" }}>
-            {["✅ İstediğin rutinleri kendin oluştur","✅ Tüm cihazlarda senkronize","✅ Seri takibi & motivasyon sistemi","✅ Tamamlanmayan rutinler için bildirim","✅ Tek ödeme, abonelik yok"].map(f => (
+            {["✅ Sınırsız rutin oluştur","✅ Tüm cihazlarda senkronize","✅ Seri takibi & motivasyon sistemi","✅ Tamamlanmayan rutinler için bildirim","✅ 1 yıl boyunca tüm güncellemeler"].map(f => (
               <div key={f} style={{ fontSize:14, color:"#374151" }}>{f}</div>
             ))}
           </div>
-          <button onClick={() => window.open(SATIN_AL_URL,"_blank")} style={{ ...S.btn(), width:"100%", borderRadius:14, padding:"16px", fontSize:16, boxShadow:"0 4px 20px rgba(22,163,74,0.3)" }}>Hemen Satın Al →</button>
+          <button onClick={() => window.open(SATIN_AL_URL,"_blank")} style={{ ...S.btn(), width:"100%", borderRadius:14, padding:"16px", fontSize:16, boxShadow:"0 4px 20px rgba(22,163,74,0.3)" }}>
+            Hemen Satın Al →
+          </button>
           <div style={{ fontSize:12, color:"#9CA3AF", marginTop:10 }}>Ödeme sonrası lisans kodun e-postana gelir</div>
         </div>
-        <button onClick={() => setScreen(SCREENS.ACTIVATE)} style={{ ...S.btn("#F9FAFB","#374151"), width:"100%", borderRadius:14, padding:"14px", fontSize:14, border:"1px solid #E5E7EB" }}>Zaten satın aldım — Lisans kodumu gir</button>
+
+        <button onClick={() => setScreen(SCREENS.ACTIVATE)} style={{ ...S.btn("#F9FAFB","#374151"), width:"100%", borderRadius:14, padding:"14px", fontSize:14, border:"1px solid #E5E7EB", marginBottom:48 }}>
+          Zaten satın aldım — Lisans kodumu gir
+        </button>
+
+        {/* Güven rozetleri */}
+        <div style={{ display:"flex", justifyContent:"center", gap:24, flexWrap:"wrap", marginBottom:48, padding:"20px", background:"white", borderRadius:16, border:"1px solid #E8F5E9" }}>
+          {[["🔒","256-bit Şifreleme"],["💳","Güvenli Ödeme"],["📧","24s İçinde Teslimat"],["🔄","1 Yıl Erişim"]].map(([e,t]) => (
+            <div key={t} style={{ textAlign:"center" }}>
+              <div style={{ fontSize:24, marginBottom:4 }}>{e}</div>
+              <div style={{ fontSize:11, color:"#9CA3AF", fontWeight:500 }}>{t}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* SSS */}
+        <div style={{ marginBottom:48 }}>
+          <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:20 }}>Sık Sorulan Sorular</div>
+          {[
+            ["Satın aldıktan sonra ne olur?","Ödeme tamamlanınca lisans kodun 24 saat içinde e-posta adresine gönderilir. Kodu uygulamaya girerek hesabını oluşturursun ve hemen kullanmaya başlarsın."],
+            ["1 yıl sonra ne olur?","1 yıllık kullanım süren dolduğunda uygulama senden yenileme talep eder. Bize WhatsApp veya e-posta ile ulaşarak kolayca yenileyebilirsin."],
+            ["Farklı cihazlarda çalışır mı?","Evet! Hesabın her cihazda senkronize çalışır. Telefon, tablet veya bilgisayardan aynı hesapla giriş yapabilirsin."],
+            ["Uygulamayı telefona yükleyebilir miyim?","Evet. Sayfanın üstündeki 'Telefona Yükle' butonuna basarak uygulamayı ana ekranına ekleyebilirsin."],
+            ["İade politikası nedir?","Herhangi bir sorun yaşarsan bize ulaş, birlikte çözelim. Memnun kalmazsan ilk 7 gün içinde iade yapabiliriz."],
+          ].map(([q, a], i) => (
+            <div key={i} style={{ ...S.card, marginBottom:8, cursor:"pointer" }} onClick={() => setFaqOpen(faqOpen === i ? null : i)}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div style={{ fontSize:14, fontWeight:600, color:"#111", paddingRight:12 }}>{q}</div>
+                <div style={{ fontSize:18, color:"#16A34A", flexShrink:0, transition:"transform 0.2s", transform:faqOpen===i?"rotate(45deg)":"rotate(0deg)" }}>+</div>
+              </div>
+              {faqOpen === i && <div style={{ fontSize:14, color:"#6B7280", lineHeight:1.7, marginTop:12, paddingTop:12, borderTop:"1px solid #E8F5E9" }}>{a}</div>}
+            </div>
+          ))}
+        </div>
+
+        {/* Alt CTA */}
+        <div style={{ textAlign:"center", background:"linear-gradient(135deg,#16A34A,#4ADE80)", borderRadius:24, padding:"40px 24px" }}>
+          <div style={{ fontSize:22, fontWeight:800, color:"white", marginBottom:8 }}>Rutinini bugün oluştur</div>
+          <div style={{ fontSize:14, color:"rgba(255,255,255,0.85)", marginBottom:24 }}>Tek ödeme · 1 yıl tam erişim · Her cihazda</div>
+          <button onClick={() => setScreen(SCREENS.ACTIVATE)} style={{ ...S.btn("white","#16A34A"), borderRadius:14, padding:"16px 40px", fontSize:16, boxShadow:"0 4px 20px rgba(0,0,0,0.15)" }}>
+            Hemen Başla →
+          </button>
+        </div>
+
+        <div style={{ textAlign:"center", marginTop:32, fontSize:12, color:"#D1D5DB" }}>
+          rutin.online · {new Date().getFullYear()} · <a href={`mailto:${CONTACT_EMAIL}`} style={{ color:"#9CA3AF" }}>{CONTACT_EMAIL}</a>
+        </div>
       </div>
     </div>
   );
