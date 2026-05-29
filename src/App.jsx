@@ -129,8 +129,9 @@ export default function RutinOnline() {
 
   // Lisans doğrula
   const checkLicense = async (key) => {
-    const data = await api(`licenses?license_key=eq.${key.trim().toUpperCase()}&limit=1`);
-    if (!data || data.length === 0) throw new Error("Geçersiz lisans kodu.");
+    const cleanKey = key.trim().toUpperCase();
+    const data = await api(`licenses?license_key=ilike.${cleanKey}&limit=1`);
+    if (!data || data.length === 0) throw new Error("Geçersiz lisans kodu. Lütfen kontrol et.");
     const lic = data[0];
     if (new Date(lic.expires_at) < new Date()) return { ...lic, expired: true };
     return { ...lic, expired: false };
@@ -334,9 +335,7 @@ export default function RutinOnline() {
         <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>LİSANS KODU</div>
         <input value={licenseInput} onChange={e => { setLicenseInput(e.target.value.toUpperCase()); setError(""); }} placeholder="RUTIN-XXXX-XXXX" style={{ ...S.input, letterSpacing:2, fontWeight:600, textAlign:"center", fontSize:18, borderColor:error?"#EF4444":"#E5E7EB", marginBottom:8 }} onKeyDown={e => e.key==="Enter" && handleActivate()} />
         {error && <div style={{ fontSize:12, color:"#EF4444", marginBottom:8, textAlign:"center" }}>{error}</div>}
-        <div style={{ background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:10, padding:"10px 14px", marginBottom:20, fontSize:12, color:"#16A34A", textAlign:"center" }}>
-          💡 Demo için <strong>RUTIN-2025-DEMO</strong> kodunu dene
-        </div>
+
         <button onClick={handleActivate} disabled={loading || !licenseInput.trim()} style={{ ...S.btn(loading || !licenseInput.trim()?"#D1D5DB":"#16A34A"), width:"100%", borderRadius:12, padding:"15px", fontSize:15, cursor:loading || !licenseInput.trim()?"not-allowed":"pointer" }}>
           {loading ? "Kontrol ediliyor..." : "Devam Et →"}
         </button>
