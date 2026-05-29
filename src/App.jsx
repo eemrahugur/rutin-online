@@ -472,8 +472,77 @@ export default function RutinOnline() {
           ))}
         </div>
 
-        {/* SSS */}
+        {/* Acı Noktaları — Rutin Kurmak Neden Zor? */}
         <div style={{ marginBottom:48 }}>
+          <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:8 }}>Tanıdık geliyor mu?</div>
+          <div style={{ fontSize:14, color:"#9CA3AF", textAlign:"center", marginBottom:24 }}>"Yarından itibaren başlıyorum" diyenlerin %92'si başlamıyor.</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {[
+              ["😓","Her sabah aynı his","Alarm çalıyor, erteliyor, suçluluk duyuyorsun. Güne zaten yenik başlıyorsun."],
+              ["📋","Liste yapıyorsun ama...","Deftere yazıyorsun, uygulamalara giriyorsun — ama 3 gün sonra her şey unutuluyor."],
+              ["🔁","Sürekli sıfırlıyorsun","Bir hafta harika gidiyor, bir şey oluyor ve her şey sıfırlanıyor. Yeniden başlamak giderek zorlaşıyor."],
+              ["😤","Motivasyon gelmiyor","'Motive olunca başlarım' diyorsun ama o gün bir türlü gelmiyor. Çünkü motivasyon alışkanlıktan sonra gelir, önce değil."],
+            ].map(([e,t,s]) => (
+              <div key={t} style={{ display:"flex", gap:14, padding:"16px 18px", background:"#FFF7ED", borderRadius:14, border:"1px solid #FED7AA" }}>
+                <span style={{ fontSize:24, flexShrink:0 }}>{e}</span>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:700, color:"#111", marginBottom:4 }}>{t}</div>
+                  <div style={{ fontSize:13, color:"#6B7280", lineHeight:1.6 }}>{s}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Rutin Neden Önemli */}
+        <div style={{ marginBottom:48, background:"linear-gradient(135deg,#F0FDF4,#DCFCE7)", borderRadius:24, padding:"32px 24px", border:"1px solid #BBF7D0" }}>
+          <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:8 }}>Rutin, kader değiştirir.</div>
+          <div style={{ fontSize:14, color:"#6B7280", textAlign:"center", marginBottom:28, lineHeight:1.7 }}>
+            Başarılı insanlar daha yetenekli değil — sadece doğru alışkanlıkları var.
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            {[
+              ["🧠","Beyin otomatik çalışır","Bir davranışı 21 kez tekrarladığında beyin onu otomatikleştirir. Artık irade gücüne ihtiyaç duymarsın."],
+              ["⚡","Küçük adımlar, büyük sonuçlar","Her gün %1 daha iyi olmak, 1 yılda 37 kat daha iyi olmak demektir. Bileşik büyümenin gücü rutinde gizli."],
+              ["🎯","Takip etmek motivasyonu artırır","Araştırmalar gösteriyor: ilerlemeyi görsel olarak takip edenler alışkanlıklarını sürdürme oranını 2 katına çıkarıyor."],
+              ["🌅","Sabah rutini her şeyi değiştirir","Dünyada en başarılı insanların %90'ının düzenli bir sabah rutini var. Bu bir tesadüf değil."],
+            ].map(([e,t,s]) => (
+              <div key={t} style={{ background:"white", borderRadius:14, padding:"16px 18px", border:"1px solid #BBF7D0" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+                  <span style={{ fontSize:22 }}>{e}</span>
+                  <div style={{ fontSize:14, fontWeight:700, color:"#111" }}>{t}</div>
+                </div>
+                <div style={{ fontSize:13, color:"#6B7280", lineHeight:1.6 }}>{s}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Kullanıcı Yorumları */}
+        <div style={{ marginBottom:48 }}>
+          <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:8 }}>Kullananlar ne diyor?</div>
+          <div style={{ fontSize:14, color:"#9CA3AF", textAlign:"center", marginBottom:24 }}>Gerçek kullanıcılar, gerçek deneyimler</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            {[
+              { name:"Ayşe K.", role:"Öğretmen, 34", stars:5, text:"3 aydır her sabah rutinime bakıyorum. Spor, okuma, su içme — hepsini düzenli yapıyorum artık. Daha önce hiç bu kadar disiplinli olamadım.", emoji:"👩‍🏫" },
+              { name:"Mert T.", role:"Yazılımcı, 28", stars:5, text:"Farklı uygulamalar denedim hep. Bu kadar sade ve işlevsel bir şey bulamadım. Telefona yükleyince ayrı bir uygulama gibi çalışıyor.", emoji:"👨‍💻" },
+              { name:"Selin Y.", role:"Girişimci, 31", stars:5, text:"Tek seferlik ödeme kararımı kolaylaştırdı. Abonelik istemesi en büyük artısı. 6 aydır kullanıyorum, değer.", emoji:"👩‍💼" },
+              { name:"Ahmet D.", role:"Öğrenci, 22", stars:5, text:"Sınav döneminde rutin kurmak çok zordu. Bu uygulama sayesinde çalışma, uyku ve spor dengemeni korudum.", emoji:"🎓" },
+            ].map((r, i) => (
+              <div key={i} style={{ ...S.card, padding:"20px" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
+                  <div style={{ width:44, height:44, borderRadius:"50%", background:"#F0FDF4", border:"1px solid #BBF7D0", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0 }}>{r.emoji}</div>
+                  <div>
+                    <div style={{ fontSize:14, fontWeight:700, color:"#111" }}>{r.name}</div>
+                    <div style={{ fontSize:12, color:"#9CA3AF" }}>{r.role}</div>
+                  </div>
+                  <div style={{ marginLeft:"auto", color:"#F59E0B", fontSize:14 }}>{"★".repeat(r.stars)}</div>
+                </div>
+                <div style={{ fontSize:14, color:"#374151", lineHeight:1.7, fontStyle:"italic" }}>"{r.text}"</div>
+              </div>
+            ))}
+          </div>
+        </div>
           <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:20 }}>Sık Sorulan Sorular</div>
           {[
             ["Satın aldıktan sonra ne olur?","Ödeme tamamlanınca lisans kodun 24 saat içinde e-posta adresine gönderilir. Kodu uygulamaya girerek hesabını oluşturursun ve hemen kullanmaya başlarsın."],
