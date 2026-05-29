@@ -554,7 +554,7 @@ export default function RutinOnline() {
             <div key={i} style={{ ...S.card, marginBottom:8, cursor:"pointer" }} onClick={() => setFaqOpen(faqOpen === i ? null : i)}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <div style={{ fontSize:14, fontWeight:600, color:"#111", paddingRight:12 }}>{q}</div>
-                <div style={{ fontSize:18, color:"#16A34A", flexShrink:0, transition:"transform 0.2s", transform:faqOpen===i?"rotate(45deg)":"rotate(0deg)" }}>+</div>
+                <div style={{ fontSize:18, color:"#16A34A", flexShrink:0, transition:"transform 0.2s", transform:faqOpen===i?`rotate(45deg)`:`rotate(0deg)` }}>+</div>
               </div>
               {faqOpen === i && <div style={{ fontSize:14, color:"#6B7280", lineHeight:1.7, marginTop:12, paddingTop:12, borderTop:"1px solid #E8F5E9" }}>{a}</div>}
             </div>
