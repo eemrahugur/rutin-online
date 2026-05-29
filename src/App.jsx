@@ -4,10 +4,10 @@ const SUPABASE_URL = "https://yzziswewoagxmbknthwo.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl6emlzd2V3b2FneG1ia250aHdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNzIyMTUsImV4cCI6MjA5NTY0ODIxNX0.MSWJ6RDsxIQUnoHL3NQRaDtAaTZyDHoQ8kBcziuW3vw";
 
 const api = async (path, options = {}) => {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  const res = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
     headers: {
       "apikey": SUPABASE_KEY,
-      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Authorization": "Bearer " + SUPABASE_KEY,
       "Content-Type": "application/json",
       "Prefer": options.prefer || "return=representation",
       ...options.headers,
@@ -26,7 +26,7 @@ const DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 const TODAY = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
 const CONTACT_WHATSAPP = "905XXXXXXXXX";
 const CONTACT_EMAIL = "destek@rutin.online";
-const SATIN_AL_URL = "https://rutin.online/satin-al";
+const SATIN_AL_URL = "https://gitsinkilolar.myikas.com/rutinonline";
 
 const EXAMPLE_ROUTINES = [
   { emoji: "📚", title: "Günde 30 dk kitap oku", time: "21:00", category: "gelişim" },
@@ -138,14 +138,14 @@ export default function RutinOnline() {
 
   const loadRoutines = async () => {
     try {
-      const data = await api(`routines?user_id=eq.${user.id}&order=created_at.asc`);
+      const data = await api("routines?user_id=eq." + user.id + "&order=created_at.asc");
       setRoutines(data || []);
     } catch(e) { console.error(e); }
   };
 
   const loadCompletions = async () => {
     try {
-      const data = await api(`completions?routine_id=in.(select id from routines where user_id=eq.${user.id})`);
+      const data = await api("completions?routine_id=in.(select id from routines where user_id=eq." + user.id + ")");
       setCompletions(data || []);
     } catch(e) { console.error(e); }
   };
@@ -153,7 +153,7 @@ export default function RutinOnline() {
   // Lisans doğrula
   const checkLicense = async (key) => {
     const cleanKey = key.trim().toUpperCase();
-    const data = await api(`licenses?license_key=ilike.${cleanKey}&limit=1`);
+    const data = await api("licenses?license_key=ilike." + cleanKey + "&limit=1");
     if (!data || data.length === 0) throw new Error("Geçersiz lisans kodu. Lütfen kontrol et.");
     const lic = data[0];
     if (new Date(lic.expires_at) < new Date()) return { ...lic, expired: true };
@@ -183,7 +183,7 @@ export default function RutinOnline() {
     setLoading(true);
     try {
       // E-posta zaten kayıtlı mı?
-      const existing = await api(`users?email=eq.${regForm.email.trim()}&limit=1`);
+      const existing = await api("users?email=eq." + regForm.email.trim() + "&limit=1");
       if (existing && existing.length > 0) { setError("Bu e-posta zaten kayıtlı. Giriş yap."); return; }
 
       // Basit hash (gerçekte bcrypt kullanılır, demo için)
@@ -215,7 +215,7 @@ export default function RutinOnline() {
     setError(""); setLoading(true);
     try {
       const passHash = btoa(loginForm.password + "_rutin_salt");
-      const data = await api(`users?email=eq.${loginForm.email.trim().toLowerCase()}&password_hash=eq.${encodeURIComponent(passHash)}&limit=1`);
+      const data = await api("users?email=eq." + loginForm.email.trim().toLowerCase() + "&password_hash=eq." + encodeURIComponent(passHash) + "&limit=1");
       if (!data || data.length === 0) { setError("E-posta veya şifre hatalı."); return; }
       const u = data[0];
       const lic = await checkLicense(u.license_key);
@@ -249,7 +249,7 @@ export default function RutinOnline() {
       const added = Array.isArray(data) ? data[0] : data;
       setRoutines(p => [...p, { ...added, completedDays: [] }]);
       if (!preset) { setNewR({ title:"", emoji:"⭐", time:"", category:"spor" }); setScreen(SCREENS.DASHBOARD); }
-      showToast(`"${r.title}" eklendi ✅`);
+      showToast(r.title + ' eklendi OK');
     } catch(e) { showToast("Eklenemedi: " + e.message, "#EF4444"); }
   };
 
@@ -257,12 +257,12 @@ export default function RutinOnline() {
   const saveEdit = async () => {
     if (!editR?.title.trim()) return;
     try {
-      await api(`routines?id=eq.${editR.id}`, {
+      await api("routines?id=eq." + editR.id, {
         method: "PATCH",
         body: JSON.stringify({ title: editR.title, emoji: editR.emoji, time: editR.time, category: editR.category }),
       });
       setRoutines(p => p.map(r => r.id === editR.id ? { ...r, ...editR } : r));
-      showToast("Rutin güncellendi ✅");
+      showToast("Rutin güncellendi OK");
       setEditR(null); setScreen(SCREENS.DASHBOARD);
     } catch(e) { showToast("Güncellenemedi.", "#EF4444"); }
   };
@@ -271,10 +271,10 @@ export default function RutinOnline() {
   const deleteRoutine = async (id) => {
     const r = routines.find(r => r.id === id);
     try {
-      await api(`routines?id=eq.${id}`, { method: "DELETE", prefer: "return=minimal" });
+      await api("routines?id=eq." + id, { method: "DELETE", prefer: "return=minimal" });
       setRoutines(p => p.filter(r => r.id !== id));
       setDeleteConfirm(null);
-      showToast(`"${r?.title}" silindi.`, "#6B7280");
+      showToast((r?.title || '') + ' silindi.', '#6B7280');
       if (screen === SCREENS.EDIT) setScreen(SCREENS.DASHBOARD);
     } catch(e) { showToast("Silinemedi.", "#EF4444"); }
   };
@@ -286,15 +286,15 @@ export default function RutinOnline() {
     const routine = routines.find(r => r.id === routineId);
     try {
       if (existing) {
-        await api(`completions?id=eq.${existing.id}`, { method: "DELETE", prefer: "return=minimal" });
+        await api("completions?id=eq." + existing.id, { method: "DELETE", prefer: "return=minimal" });
         setCompletions(p => p.filter(c => c.id !== existing.id));
-        await api(`routines?id=eq.${routineId}`, { method: "PATCH", body: JSON.stringify({ streak: Math.max(0, (routine?.streak || 1) - 1) }) });
+        await api("routines?id=eq." + routineId, { method: "PATCH", body: JSON.stringify({ streak: Math.max(0, (routine?.streak || 1) - 1) }) });
         setRoutines(p => p.map(r => r.id === routineId ? { ...r, streak: Math.max(0, (r.streak || 1) - 1) } : r));
       } else {
         const data = await api("completions", { method: "POST", body: JSON.stringify({ routine_id: routineId, completed_date: date }) });
         const added = Array.isArray(data) ? data[0] : data;
         setCompletions(p => [...p, added]);
-        await api(`routines?id=eq.${routineId}`, { method: "PATCH", body: JSON.stringify({ streak: (routine?.streak || 0) + 1 }) });
+        await api("routines?id=eq." + routineId, { method: "PATCH", body: JSON.stringify({ streak: (routine?.streak || 0) + 1 }) });
         setRoutines(p => p.map(r => r.id === routineId ? { ...r, streak: (r.streak || 0) + 1 } : r));
       }
     } catch(e) { showToast("İşlem başarısız.", "#EF4444"); }
@@ -311,34 +311,32 @@ export default function RutinOnline() {
         <Logo size={52} textSize={30} dotSize={15} />
         <div style={{ fontSize:13, color:"#86EFAC", marginTop:8, letterSpacing:2 }}>rutinini oluştur</div>
       </div>
-      <style>{`@keyframes pop { from{opacity:0;transform:scale(0.85);}to{opacity:1;transform:scale(1);} }`}</style>
+      <style>{"@keyframes pop { from { opacity: 0; } to { opacity: 1; } }"}</style>
     </div>
   );
 
   // LANDING
   if (screen === SCREENS.LANDING) return (
     <div style={S.app}>
-      {/* iOS Install Modal */}
       {showIosInstall && (
         <div onClick={() => setShowIosInstall(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center", padding:16 }}>
           <div onClick={e => e.stopPropagation()} style={{ ...S.card, width:"100%", maxWidth:420, padding:28, textAlign:"center", borderRadius:24 }}>
             <div style={{ fontSize:36, marginBottom:12 }}>📱</div>
-            <div style={{ fontSize:18, fontWeight:800, color:"#111", marginBottom:8 }}>Ana Ekrana Ekle</div>
-            <div style={{ fontSize:14, color:"#6B7280", lineHeight:1.8, marginBottom:20 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10, background:"#F9FAFB", borderRadius:12, padding:"12px 16px", marginBottom:10, textAlign:"left" }}>
-                <span style={{ fontSize:22 }}>1️⃣</span>
-                <span>Alttaki <strong>Paylaş</strong> butonuna bas <span style={{ fontSize:18 }}>⎙</span></span>
+            <div style={{ fontSize:18, fontWeight:800, color:"#111", marginBottom:16 }}>Ana Ekrana Ekle</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:20 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, background:"#F9FAFB", borderRadius:12, padding:"12px 16px", textAlign:"left" }}>
+                <span>1.</span>
+                <span>Alttaki Paylas butonuna bas</span>
               </div>
-              <div style={{ display:"flex", alignItems:"center", gap:10, background:"#F9FAFB", borderRadius:12, padding:"12px 16px", marginBottom:10, textAlign:"left" }}>
-                <span style={{ fontSize:22 }}>2️⃣</span>
-                <span><strong>"Ana Ekrana Ekle"</strong> seçeneğine bas</span>
+              <div style={{ display:"flex", alignItems:"center", gap:10, background:"#F9FAFB", borderRadius:12, padding:"12px 16px", textAlign:"left" }}>
+                <span>2.</span>
+                <span>Ana Ekrana Ekle secenegine bas</span>
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:10, background:"#F0FDF4", borderRadius:12, padding:"12px 16px", textAlign:"left", border:"1px solid #BBF7D0" }}>
-                <span style={{ fontSize:22 }}>✅</span>
-                <span>Hazır! Uygulama telefona yüklendi.</span>
+                <span>Hazir! Uygulama telefona yuklendi.</span>
               </div>
             </div>
-            <button onClick={() => setShowIosInstall(false)} style={{ ...S.btn(), width:"100%", borderRadius:14, padding:"14px" }}>Anladım</button>
+            <button onClick={() => setShowIosInstall(false)} style={{ ...S.btn(), width:"100%", borderRadius:14, padding:"14px" }}>Anladim</button>
           </div>
         </div>
       )}
@@ -346,72 +344,67 @@ export default function RutinOnline() {
       <nav style={S.nav}>
         <Logo size={22} textSize={16} dotSize={10} />
         <div style={{ display:"flex", gap:10 }}>
-          <button onClick={() => setScreen(SCREENS.LOGIN)} style={{ ...S.btn("transparent","#16A34A"), border:"1.5px solid #16A34A", padding:"9px 20px", fontSize:14 }}>Giriş Yap</button>
-          <button onClick={() => setScreen(SCREENS.ACTIVATE)} style={{ ...S.btn(), padding:"9px 20px", fontSize:14 }}>Başla</button>
+          <button onClick={() => setScreen(SCREENS.LOGIN)} style={{ ...S.btn("transparent","#16A34A"), border:"1.5px solid #16A34A", padding:"9px 20px", fontSize:14 }}>Giris Yap</button>
+          <button onClick={() => setScreen(SCREENS.ACTIVATE)} style={{ ...S.btn(), padding:"9px 20px", fontSize:14 }}>Basla</button>
         </div>
       </nav>
 
-      {/* PWA Install Banner */}
       {showInstallBanner && (
         <div style={{ background:"#F0FDF4", borderBottom:"1px solid #BBF7D0", padding:"12px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <span style={{ fontSize:20 }}>📲</span>
             <div>
-              <div style={{ fontSize:13, fontWeight:600, color:"#16A34A" }}>Uygulamayı telefonuna yükle</div>
-              <div style={{ fontSize:12, color:"#6B7280" }}>Ana ekrandan hızlıca eriş</div>
+              <div style={{ fontSize:13, fontWeight:600, color:"#16A34A" }}>Uygulamayi telefonuna yukle</div>
+              <div style={{ fontSize:12, color:"#6B7280" }}>Ana ekrandan hizlica eris</div>
             </div>
           </div>
           <div style={{ display:"flex", gap:8 }}>
-            <button onClick={handleInstall} style={{ ...S.btn(), padding:"8px 16px", fontSize:13, borderRadius:10 }}>Yükle</button>
-            <button onClick={() => setShowInstallBanner(false)} style={{ ...S.btn("transparent","#9CA3AF"), padding:"8px", fontSize:16, borderRadius:10 }}>✕</button>
+            <button onClick={handleInstall} style={{ ...S.btn(), padding:"8px 16px", fontSize:13, borderRadius:10 }}>Yukle</button>
+            <button onClick={() => setShowInstallBanner(false)} style={{ ...S.btn("transparent","#9CA3AF"), padding:"8px", fontSize:16, borderRadius:10 }}>X</button>
           </div>
         </div>
       )}
 
       <div style={{ maxWidth:580, margin:"0 auto", padding:"56px 24px 60px" }}>
-
-        {/* Hero */}
         <div style={{ textAlign:"center", marginBottom:48 }}>
           <h1 style={{ fontSize:"clamp(28px,6vw,48px)", fontWeight:800, lineHeight:1.15, marginBottom:16, color:"#111" }}>
-            Küçük alışkanlıklar,<br /><span style={{ color:"#16A34A" }}>büyük değişimler.</span>
+            Kucuk aliskanliklar,<br /><span style={{ color:"#16A34A" }}>buyuk degisimler.</span>
           </h1>
           <p style={{ fontSize:16, color:"#6B7280", lineHeight:1.75, marginBottom:32, maxWidth:440, margin:"0 auto 32px" }}>
-            Kendi günlük rutinlerini oluştur, takip et ve geliştir. Her cihazda senkronize, tek ödeme.
+            Kendi gunluk rutinlerini olustur, takip et ve gelistir. Her cihazda senkronize, tek odeme.
           </p>
           <div style={{ display:"flex", gap:12, justifyContent:"center", flexWrap:"wrap" }}>
             <button onClick={() => setScreen(SCREENS.ACTIVATE)} style={{ ...S.btn(), borderRadius:14, padding:"16px 36px", fontSize:16, boxShadow:"0 4px 20px rgba(22,163,74,0.3)" }}>
-              Hemen Başla →
+              Hemen Basla
             </button>
             <button onClick={handleInstall} style={{ ...S.btn("#F0FDF4","#16A34A"), borderRadius:14, padding:"16px 24px", fontSize:15, border:"1px solid #BBF7D0" }}>
-              📲 Telefona Yükle
+              Telefona Yukle
             </button>
           </div>
         </div>
 
-        {/* Uygulama Önizleme */}
         <div style={{ background:"linear-gradient(135deg,#F0FDF4,#DCFCE7)", borderRadius:24, padding:24, marginBottom:48, border:"1px solid #BBF7D0" }}>
-          <div style={{ fontSize:13, color:"#16A34A", fontWeight:600, textAlign:"center", marginBottom:20, letterSpacing:1, textTransform:"uppercase" }}>Uygulama Önizlemesi</div>
+          <div style={{ fontSize:13, color:"#16A34A", fontWeight:600, textAlign:"center", marginBottom:20, letterSpacing:1, textTransform:"uppercase" }}>Uygulama Onizlemesi</div>
           <div style={{ ...S.card, borderRadius:20, overflow:"hidden" }}>
-            {/* Fake progress bar */}
             <div style={{ height:4, background:"#F0FDF4" }}>
               <div style={{ width:"60%", height:"100%", background:"linear-gradient(90deg,#16A34A,#4ADE80)" }} />
             </div>
             <div style={{ padding:"16px 18px" }}>
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:16 }}>
                 <div>
-                  <div style={{ fontSize:18, fontWeight:800, color:"#111" }}>3/5 tamamlandı</div>
-                  <div style={{ fontSize:12, color:"#9CA3AF" }}>2 rutin kaldı</div>
+                  <div style={{ fontSize:18, fontWeight:800, color:"#111" }}>3/5 tamamlandi</div>
+                  <div style={{ fontSize:12, color:"#9CA3AF" }}>2 rutin kaldi</div>
                 </div>
                 <div style={{ fontSize:32, fontWeight:900, color:"#16A34A" }}>60%</div>
               </div>
-              {[["🏃","Günde 45 dk egzersiz yap",true,12],["💧","Günde 2 litre su iç",true,7],["📚","Günde 30 dk kitap oku",false,5]].map(([e,t,done,s]) => (
-                <div key={t} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", background:done?"#F0FDF4":"#FAFAFA", borderRadius:12, border:`1px solid ${done?"#BBF7D0":"#F3F4F6"}`, marginBottom:8 }}>
+              {[["🏃","Gunde 45 dk egzersiz yap",true,12],["💧","Gunde 2 litre su ic",true,7],["📚","Gunde 30 dk kitap oku",false,5]].map(([e,t,done,s]) => (
+                <div key={t} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", background:done?"#F0FDF4":"#FAFAFA", borderRadius:12, border:"1px solid " + (done?"#BBF7D0":"#F3F4F6"), marginBottom:8 }}>
                   <div style={{ width:38, height:38, borderRadius:"50%", background:done?"#DCFCE7":"#F3F4F6", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>{e}</div>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:13, fontWeight:600, color:done?"#16A34A":"#374151", textDecoration:done?"line-through":"none" }}>{t}</div>
-                    <div style={{ fontSize:11, color:"#F59E0B", fontWeight:600 }}>🔥 {s} gün seri</div>
+                    <div style={{ fontSize:11, color:"#F59E0B", fontWeight:600 }}>🔥 {s} gun seri</div>
                   </div>
-                  <div style={{ width:24, height:24, borderRadius:"50%", background:done?"#16A34A":"transparent", border:`2px solid ${done?"#16A34A":"#D1D5DB"}`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <div style={{ width:24, height:24, borderRadius:"50%", background:done?"#16A34A":"transparent", border:"2px solid " + (done?"#16A34A":"#D1D5DB"), display:"flex", alignItems:"center", justifyContent:"center" }}>
                     {done && <svg width="12" height="12" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
                   </div>
                 </div>
@@ -420,17 +413,16 @@ export default function RutinOnline() {
           </div>
         </div>
 
-        {/* Özellikler */}
         <div style={{ marginBottom:48 }}>
           <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:20 }}>Neden rutin.online?</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
             {[
-              ["🎯","Kendin Oluştur","Hazır rutin yok. Her şeyi kendin belirlersin."],
-              ["🔥","Seri Takibi","Günlük serini kır, motivasyonunu koru."],
-              ["📱","Her Cihazda","Telefon, tablet, bilgisayar — her yerde senkronize."],
-              ["🔔","Hatırlatıcılar","Tamamlanmayan rutinler için bildirim al."],
-              ["📊","İstatistikler","Haftalık ve aylık gelişimini takip et."],
-              ["🔒","Güvenli","Verilen bilgilerin şifreli ve güvende."],
+              ["🎯","Kendin Olustur","Hazir rutin yok. Her seyi kendin belirlersin."],
+              ["🔥","Seri Takibi","Gunluk serini kir, motivasyonunu koru."],
+              ["📱","Her Cihazda","Telefon, tablet, bilgisayar - her yerde senkronize."],
+              ["🔔","Hatirlaticilar","Tamamlanmayan rutinler icin bildirim al."],
+              ["📊","Istatistikler","Haftalik ve aylik gelisimini takip et."],
+              ["🔒","Guvenli","Verilen bilgilerin sifreli ve guvende."],
             ].map(([e,t,s]) => (
               <div key={t} style={{ ...S.card }}>
                 <div style={{ fontSize:28, marginBottom:8 }}>{e}</div>
@@ -441,30 +433,28 @@ export default function RutinOnline() {
           </div>
         </div>
 
-        {/* Fiyat */}
         <div style={{ ...S.card, marginBottom:16, background:"linear-gradient(135deg,#F0FDF4,#DCFCE7)", border:"1.5px solid #86EFAC", textAlign:"center" }}>
-          <div style={{ fontSize:13, color:"#16A34A", fontWeight:700, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>Tek Seferlik Ödeme</div>
+          <div style={{ fontSize:13, color:"#16A34A", fontWeight:700, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>Tek Seferlik Odeme</div>
           <div style={{ fontSize:56, fontWeight:900, color:"#111", lineHeight:1 }}>199₺</div>
-          <div style={{ fontSize:14, color:"#6B7280", margin:"8px 0 4px" }}>1 Yıllık Tam Erişim</div>
-          <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:24 }}>Abonelik yok · Otomatik ücret yok</div>
+          <div style={{ fontSize:14, color:"#6B7280", margin:"8px 0 4px" }}>1 Yillik Tam Erisim</div>
+          <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:24 }}>Abonelik yok - Otomatik ucret yok</div>
           <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:24, textAlign:"left" }}>
-            {["✅ Sınırsız rutin oluştur","✅ Tüm cihazlarda senkronize","✅ Seri takibi & motivasyon sistemi","✅ Tamamlanmayan rutinler için bildirim","✅ 1 yıl boyunca tüm güncellemeler"].map(f => (
-              <div key={f} style={{ fontSize:14, color:"#374151" }}>{f}</div>
+            {["Sinırsız rutin olustur","Tum cihazlarda senkronize","Seri takibi ve motivasyon sistemi","Tamamlanmayan rutinler icin bildirim","1 yil boyunca tum guncellemeler"].map(f => (
+              <div key={f} style={{ fontSize:14, color:"#374151" }}>{"✅ " + f}</div>
             ))}
           </div>
           <button onClick={() => window.open(SATIN_AL_URL,"_blank")} style={{ ...S.btn(), width:"100%", borderRadius:14, padding:"16px", fontSize:16, boxShadow:"0 4px 20px rgba(22,163,74,0.3)" }}>
-            Hemen Satın Al →
+            Hemen Satin Al
           </button>
-          <div style={{ fontSize:12, color:"#9CA3AF", marginTop:10 }}>Ödeme sonrası lisans kodun e-postana gelir</div>
+          <div style={{ fontSize:12, color:"#9CA3AF", marginTop:10 }}>Odeme sonrasi lisans kodun e-postana gelir</div>
         </div>
 
         <button onClick={() => setScreen(SCREENS.ACTIVATE)} style={{ ...S.btn("#F9FAFB","#374151"), width:"100%", borderRadius:14, padding:"14px", fontSize:14, border:"1px solid #E5E7EB", marginBottom:48 }}>
-          Zaten satın aldım — Lisans kodumu gir
+          Zaten satin aldim - Lisans kodumu gir
         </button>
 
-        {/* Güven rozetleri */}
         <div style={{ display:"flex", justifyContent:"center", gap:24, flexWrap:"wrap", marginBottom:48, padding:"20px", background:"white", borderRadius:16, border:"1px solid #E8F5E9" }}>
-          {[["🔒","256-bit Şifreleme"],["💳","Güvenli Ödeme"],["📧","24s İçinde Teslimat"],["🔄","1 Yıl Erişim"]].map(([e,t]) => (
+          {[["🔒","256-bit Sifreleme"],["💳","Guvenli Odeme"],["📧","24s Icinde Teslimat"],["🔄","1 Yil Erisim"]].map(([e,t]) => (
             <div key={t} style={{ textAlign:"center" }}>
               <div style={{ fontSize:24, marginBottom:4 }}>{e}</div>
               <div style={{ fontSize:11, color:"#9CA3AF", fontWeight:500 }}>{t}</div>
@@ -472,16 +462,15 @@ export default function RutinOnline() {
           ))}
         </div>
 
-        {/* Acı Noktaları — Rutin Kurmak Neden Zor? */}
         <div style={{ marginBottom:48 }}>
-          <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:8 }}>Tanıdık geliyor mu?</div>
-          <div style={{ fontSize:14, color:"#9CA3AF", textAlign:"center", marginBottom:24 }}>"Yarından itibaren başlıyorum" diyenlerin %92'si başlamıyor.</div>
+          <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:8 }}>Tanidk geliyor mu?</div>
+          <div style={{ fontSize:14, color:"#9CA3AF", textAlign:"center", marginBottom:24 }}>Yarindan itibaren basliyorum diyenlerin cogu hic baslayamiyor.</div>
           <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
             {[
-              ["😓","Her sabah aynı his","Alarm çalıyor, erteliyor, suçluluk duyuyorsun. Güne zaten yenik başlıyorsun."],
-              ["📋","Liste yapıyorsun ama...","Deftere yazıyorsun, uygulamalara giriyorsun — ama 3 gün sonra her şey unutuluyor."],
-              ["🔁","Sürekli sıfırlıyorsun","Bir hafta harika gidiyor, bir şey oluyor ve her şey sıfırlanıyor. Yeniden başlamak giderek zorlaşıyor."],
-              ["😤","Motivasyon gelmiyor","'Motive olunca başlarım' diyorsun ama o gün bir türlü gelmiyor. Çünkü motivasyon alışkanlıktan sonra gelir, önce değil."],
+              ["😓","Her sabah ayni his","Alarm caliyor, erteliyor, sucluluk duyuyorsun."],
+              ["📋","Liste yapiyorsun ama...","Deftere yaziyorsun ama 3 gun sonra her sey unutuluyor."],
+              ["🔁","Surekli sifirliyorsun","Bir hafta harika gidiyor, bir sey oluyor ve her sey sifirlanıyor."],
+              ["😤","Motivasyon gelmiyor","Motive olunca baslarim diyorsun ama o gun bir turlu gelmiyor."],
             ].map(([e,t,s]) => (
               <div key={t} style={{ display:"flex", gap:14, padding:"16px 18px", background:"#FFF7ED", borderRadius:14, border:"1px solid #FED7AA" }}>
                 <span style={{ fontSize:24, flexShrink:0 }}>{e}</span>
@@ -494,18 +483,17 @@ export default function RutinOnline() {
           </div>
         </div>
 
-        {/* Rutin Neden Önemli */}
         <div style={{ marginBottom:48, background:"linear-gradient(135deg,#F0FDF4,#DCFCE7)", borderRadius:24, padding:"32px 24px", border:"1px solid #BBF7D0" }}>
-          <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:8 }}>Rutin, kader değiştirir.</div>
+          <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:8 }}>Rutin, kader degistirir.</div>
           <div style={{ fontSize:14, color:"#6B7280", textAlign:"center", marginBottom:28, lineHeight:1.7 }}>
-            Başarılı insanlar daha yetenekli değil — sadece doğru alışkanlıkları var.
+            Basarili insanlar daha yetenekli degil - sadece dogru aliskanlikları var.
           </div>
           <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
             {[
-              ["🧠","Beyin otomatik çalışır","Bir davranışı 21 kez tekrarladığında beyin onu otomatikleştirir. Artık irade gücüne ihtiyaç duymarsın."],
-              ["⚡","Küçük adımlar, büyük sonuçlar","Her gün %1 daha iyi olmak, 1 yılda 37 kat daha iyi olmak demektir. Bileşik büyümenin gücü rutinde gizli."],
-              ["🎯","Takip etmek motivasyonu artırır","Araştırmalar gösteriyor: ilerlemeyi görsel olarak takip edenler alışkanlıklarını sürdürme oranını 2 katına çıkarıyor."],
-              ["🌅","Sabah rutini her şeyi değiştirir","Dünyada en başarılı insanların %90'ının düzenli bir sabah rutini var. Bu bir tesadüf değil."],
+              ["🧠","Beyin otomatik calisir","Bir davranisi 21 kez tekrarladiginda beyin onu otomatikslestirir."],
+              ["⚡","Kucuk adimlar, buyuk sonuclar","Her gun yuzde 1 daha iyi olmak, 1 yilda 37 kat daha iyi olmak demektir."],
+              ["🎯","Takip etmek motivasyonu artirir","Ilerlemeyi gorsel takip edenler aliskanliklarini surdurmede cok daha basarili."],
+              ["🌅","Sabah rutini her seyi degistirir","Dunya genelinde basarili insanların buyuk cogunlugunun duzenli bir sabah rutini var."],
             ].map(([e,t,s]) => (
               <div key={t} style={{ background:"white", borderRadius:14, padding:"16px 18px", border:"1px solid #BBF7D0" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
@@ -518,16 +506,15 @@ export default function RutinOnline() {
           </div>
         </div>
 
-        {/* Kullanıcı Yorumları */}
         <div style={{ marginBottom:48 }}>
           <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:8 }}>Kullananlar ne diyor?</div>
-          <div style={{ fontSize:14, color:"#9CA3AF", textAlign:"center", marginBottom:24 }}>Gerçek kullanıcılar, gerçek deneyimler</div>
+          <div style={{ fontSize:14, color:"#9CA3AF", textAlign:"center", marginBottom:24 }}>Gercek kullanicilar, gercek deneyimler</div>
           <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
             {[
-              { name:"Ayşe K.", role:"Öğretmen, 34", stars:5, text:"3 aydır her sabah rutinime bakıyorum. Spor, okuma, su içme — hepsini düzenli yapıyorum artık. Daha önce hiç bu kadar disiplinli olamadım.", emoji:"👩‍🏫" },
-              { name:"Mert T.", role:"Yazılımcı, 28", stars:5, text:"Farklı uygulamalar denedim hep. Bu kadar sade ve işlevsel bir şey bulamadım. Telefona yükleyince ayrı bir uygulama gibi çalışıyor.", emoji:"👨‍💻" },
-              { name:"Selin Y.", role:"Girişimci, 31", stars:5, text:"Tek seferlik ödeme kararımı kolaylaştırdı. Abonelik istemesi en büyük artısı. 6 aydır kullanıyorum, değer.", emoji:"👩‍💼" },
-              { name:"Ahmet D.", role:"Öğrenci, 22", stars:5, text:"Sınav döneminde rutin kurmak çok zordu. Bu uygulama sayesinde çalışma, uyku ve spor dengemeni korudum.", emoji:"🎓" },
+              { name:"Ayse K.", role:"Ogretmen, 34", stars:5, text:"3 aydir her sabah rutinime bakiyorum. Spor, okuma, su icme hepsini duzenli yapiyorum artik.", emoji:"👩" },
+              { name:"Mert T.", role:"Yazilimci, 28", stars:5, text:"Farkli uygulamalar denedim hep. Bu kadar sade ve islevsel bir sey bulamadim. Telefona yukleyince ayri bir uygulama gibi calisiyor.", emoji:"👨" },
+              { name:"Selin Y.", role:"Girisimci, 31", stars:5, text:"Tek seferlik odeme kararimi kolaylastirdi. Abonelik istememesi en buyuk artisi. 6 aydir kullaniyorum, deger.", emoji:"👩" },
+              { name:"Ahmet D.", role:"Ogrenci, 22", stars:5, text:"Sinav doneminde rutin kurmak cok zordu. Bu uygulama sayesinde calisma, uyku ve spor dengemeni korudum.", emoji:"🎓" },
             ].map((r, i) => (
               <div key={i} style={{ ...S.card, padding:"20px" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
@@ -536,47 +523,47 @@ export default function RutinOnline() {
                     <div style={{ fontSize:14, fontWeight:700, color:"#111" }}>{r.name}</div>
                     <div style={{ fontSize:12, color:"#9CA3AF" }}>{r.role}</div>
                   </div>
-                  <div style={{ marginLeft:"auto", color:"#F59E0B", fontSize:14 }}>{"★".repeat(r.stars)}</div>
+                  <div style={{ marginLeft:"auto", color:"#F59E0B", fontSize:14 }}>{"*".repeat(r.stars)}</div>
                 </div>
-                <div style={{ fontSize:14, color:"#374151", lineHeight:1.7, fontStyle:"italic" }}>"{r.text}"</div>
+                <div style={{ fontSize:14, color:"#374151", lineHeight:1.7, fontStyle:"italic" }}>{r.text}</div>
               </div>
             ))}
           </div>
         </div>
-          <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:20 }}>Sık Sorulan Sorular</div>
+
+        <div style={{ marginBottom:48 }}>
+          <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:20 }}>Sik Sorulan Sorular</div>
           {[
-            ["Satın aldıktan sonra ne olur?","Ödeme tamamlanınca lisans kodun 24 saat içinde e-posta adresine gönderilir. Kodu uygulamaya girerek hesabını oluşturursun ve hemen kullanmaya başlarsın."],
-            ["1 yıl sonra ne olur?","1 yıllık kullanım süren dolduğunda uygulama senden yenileme talep eder. Bize WhatsApp veya e-posta ile ulaşarak kolayca yenileyebilirsin."],
-            ["Farklı cihazlarda çalışır mı?","Evet! Hesabın her cihazda senkronize çalışır. Telefon, tablet veya bilgisayardan aynı hesapla giriş yapabilirsin."],
-            ["Uygulamayı telefona yükleyebilir miyim?","Evet. Sayfanın üstündeki 'Telefona Yükle' butonuna basarak uygulamayı ana ekranına ekleyebilirsin."],
-            ["İade politikası nedir?","Herhangi bir sorun yaşarsan bize ulaş, birlikte çözelim. Memnun kalmazsan ilk 7 gün içinde iade yapabiliriz."],
+            ["Satin aldiktan sonra ne olur?","Odeme tamamlaninca lisans kodun 24 saat icinde e-posta adresine gonderilir."],
+            ["1 yil sonra ne olur?","1 yillik kullanim suren dolduğunda uygulama senden yenileme talep eder."],
+            ["Farkli cihazlarda calisir mi?","Evet! Hesabin her cihazda senkronize calisir."],
+            ["Uygulamayi telefona yukleyebilir miyim?","Evet. Sayfanin ustundeki Telefona Yukle butonuna basarak ana ekranina ekleyebilirsin."],
+            ["Iade politikasi nedir?","Herhangi bir sorun yasarsan bize ulaş, birlikte cozelim. Ilk 7 gun iade yapabiliriz."],
           ].map(([q, a], i) => (
             <div key={i} style={{ ...S.card, marginBottom:8, cursor:"pointer" }} onClick={() => setFaqOpen(faqOpen === i ? null : i)}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <div style={{ fontSize:14, fontWeight:600, color:"#111", paddingRight:12 }}>{q}</div>
-                <div style={{ fontSize:18, color:"#16A34A", flexShrink:0, transition:"transform 0.2s", transform:faqOpen===i?`rotate(45deg)`:`rotate(0deg)` }}>+</div>
+                <div style={{ fontSize:18, color:"#16A34A", flexShrink:0 }}>{faqOpen===i ? "-" : "+"}</div>
               </div>
               {faqOpen === i && <div style={{ fontSize:14, color:"#6B7280", lineHeight:1.7, marginTop:12, paddingTop:12, borderTop:"1px solid #E8F5E9" }}>{a}</div>}
             </div>
           ))}
         </div>
 
-        {/* Alt CTA */}
         <div style={{ textAlign:"center", background:"linear-gradient(135deg,#16A34A,#4ADE80)", borderRadius:24, padding:"40px 24px" }}>
-          <div style={{ fontSize:22, fontWeight:800, color:"white", marginBottom:8 }}>Rutinini bugün oluştur</div>
-          <div style={{ fontSize:14, color:"rgba(255,255,255,0.85)", marginBottom:24 }}>Tek ödeme · 1 yıl tam erişim · Her cihazda</div>
+          <div style={{ fontSize:22, fontWeight:800, color:"white", marginBottom:8 }}>Rutinini bugun olustur</div>
+          <div style={{ fontSize:14, color:"rgba(255,255,255,0.85)", marginBottom:24 }}>Tek odeme - 1 yil tam erisim - Her cihazda</div>
           <button onClick={() => setScreen(SCREENS.ACTIVATE)} style={{ ...S.btn("white","#16A34A"), borderRadius:14, padding:"16px 40px", fontSize:16, boxShadow:"0 4px 20px rgba(0,0,0,0.15)" }}>
-            Hemen Başla →
+            Hemen Basla
           </button>
         </div>
 
         <div style={{ textAlign:"center", marginTop:32, fontSize:12, color:"#D1D5DB" }}>
-          rutin.online · {new Date().getFullYear()} · <a href={`mailto:${CONTACT_EMAIL}`} style={{ color:"#9CA3AF" }}>{CONTACT_EMAIL}</a>
+          rutin.online - {new Date().getFullYear()} - {CONTACT_EMAIL}
         </div>
       </div>
     </div>
   );
-
   // LİSANS AKTİVASYON
   if (screen === SCREENS.ACTIVATE) return (
     <div style={{ ...S.app, display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh" }}>
@@ -591,12 +578,12 @@ export default function RutinOnline() {
         {error && <div style={{ fontSize:12, color:"#EF4444", marginBottom:8, textAlign:"center" }}>{error}</div>}
 
         <button onClick={handleActivate} disabled={loading || !licenseInput.trim()} style={{ ...S.btn(loading || !licenseInput.trim()?"#D1D5DB":"#16A34A"), width:"100%", borderRadius:12, padding:"15px", fontSize:15, cursor:loading || !licenseInput.trim()?"not-allowed":"pointer" }}>
-          {loading ? "Kontrol ediliyor..." : "Devam Et →"}
+          {loading ? "Kontrol ediliyor..." : "Devam Et  "}
         </button>
         <div style={{ textAlign:"center", marginTop:16, fontSize:13, color:"#9CA3AF" }}>
           Zaten hesabın var mı? <span onClick={() => setScreen(SCREENS.LOGIN)} style={{ color:"#16A34A", cursor:"pointer", fontWeight:600 }}>Giriş yap</span>
         </div>
-        <div onClick={() => setScreen(SCREENS.LANDING)} style={{ textAlign:"center", marginTop:10, fontSize:12, color:"#D1D5DB", cursor:"pointer" }}>← Geri</div>
+        <div onClick={() => setScreen(SCREENS.LANDING)} style={{ textAlign:"center", marginTop:10, fontSize:12, color:"#D1D5DB", cursor:"pointer" }}>Geri</div>
       </div>
     </div>
   );
@@ -618,9 +605,9 @@ export default function RutinOnline() {
           </div>
         ))}
         <button onClick={handleRegister} disabled={loading} style={{ ...S.btn(loading?"#D1D5DB":"#16A34A"), width:"100%", borderRadius:12, padding:"15px", fontSize:15, marginTop:8, cursor:loading?"not-allowed":"pointer" }}>
-          {loading ? "Kaydediliyor..." : "Hesabı Oluştur →"}
+          {loading ? "Kaydediliyor..." : "Hesabı Oluştur  "}
         </button>
-        <div onClick={() => setScreen(SCREENS.ACTIVATE)} style={{ textAlign:"center", marginTop:12, fontSize:12, color:"#D1D5DB", cursor:"pointer" }}>← Geri</div>
+        <div onClick={() => setScreen(SCREENS.ACTIVATE)} style={{ textAlign:"center", marginTop:12, fontSize:12, color:"#D1D5DB", cursor:"pointer" }}>Geri</div>
       </div>
     </div>
   );
@@ -642,12 +629,12 @@ export default function RutinOnline() {
           </div>
         ))}
         <button onClick={handleLogin} disabled={loading} style={{ ...S.btn(loading?"#D1D5DB":"#16A34A"), width:"100%", borderRadius:12, padding:"15px", fontSize:15, marginTop:8, cursor:loading?"not-allowed":"pointer" }}>
-          {loading ? "Giriş yapılıyor..." : "Giriş Yap →"}
+          {loading ? "Giriş yapılıyor..." : "Giriş Yap  "}
         </button>
         <div style={{ textAlign:"center", marginTop:16, fontSize:13, color:"#9CA3AF" }}>
           Hesabın yok mu? <span onClick={() => setScreen(SCREENS.ACTIVATE)} style={{ color:"#16A34A", cursor:"pointer", fontWeight:600 }}>Lisans koduyla kayıt ol</span>
         </div>
-        <div onClick={() => setScreen(SCREENS.LANDING)} style={{ textAlign:"center", marginTop:10, fontSize:12, color:"#D1D5DB", cursor:"pointer" }}>← Geri</div>
+        <div onClick={() => setScreen(SCREENS.LANDING)} style={{ textAlign:"center", marginTop:10, fontSize:12, color:"#D1D5DB", cursor:"pointer" }}>Geri</div>
       </div>
     </div>
   );
@@ -667,10 +654,10 @@ export default function RutinOnline() {
           <div style={{ fontSize:13, color:"#9CA3AF" }}>+ 1 yıl daha tam erişim</div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          <button onClick={() => window.open(`https://wa.me/${CONTACT_WHATSAPP}?text=Merhaba, lisansımı yenilemek istiyorum. E-posta: ${user?.email}`,"_blank")} style={{ ...S.btn("#25D366"), borderRadius:12, padding:"14px", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
+          <button onClick={() => window.open("https://wa.me/" + CONTACT_WHATSAPP + "?text=Merhaba, lisansimi yenilemek istiyorum.","_blank")} style={{ ...S.btn("#25D366"), borderRadius:12, padding:"14px", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
             <span style={{ fontSize:20 }}>💬</span> WhatsApp ile Yenile
           </button>
-          <button onClick={() => window.open(`mailto:${CONTACT_EMAIL}?subject=Lisans Yenileme&body=Merhaba, lisansımı yenilemek istiyorum. E-posta: ${user?.email}`,"_blank")} style={{ ...S.btn("#F9FAFB","#374151"), border:"1px solid #E5E7EB", borderRadius:12, padding:"14px", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
+          <button onClick={() => window.open("mailto:" + CONTACT_EMAIL + "?subject=Lisans Yenileme","_blank")} style={{ ...S.btn("#F9FAFB","#374151"), border:"1px solid #E5E7EB", borderRadius:12, padding:"14px", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
             <span style={{ fontSize:20 }}>📧</span> E-posta ile Yenile
           </button>
         </div>
@@ -695,9 +682,9 @@ export default function RutinOnline() {
         </nav>
 
         {expiringSoon && (
-          <div style={{ background:remaining<=7?"#FEF2F2":"#FFFBEB", borderBottom:`1px solid ${remaining<=7?"#FECACA":"#FDE68A"}`, padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ background:remaining<=7?"#FEF2F2":"#FFFBEB", borderBottom:"1px solid " + (remaining<=7?"#FECACA":"#FDE68A"), padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div style={{ fontSize:13, color:remaining<=7?"#DC2626":"#D97706" }}>{remaining<=7?"⚠️":"🕐"} Lisansın <strong>{remaining} gün</strong> sonra doluyor</div>
-            <button onClick={() => window.open(`https://wa.me/${CONTACT_WHATSAPP}?text=Lisansımı yenilemek istiyorum.`,"_blank")} style={{ ...S.btn(remaining<=7?"#DC2626":"#D97706"), padding:"6px 14px", fontSize:12, borderRadius:8 }}>Yenile</button>
+            <button onClick={() => window.open("https://wa.me/" + CONTACT_WHATSAPP + "?text=Lisansimi yenilemek istiyorum.","_blank")} style={{ ...S.btn(remaining<=7?"#DC2626":"#D97706"), padding:"6px 14px", fontSize:12, borderRadius:8 }}>Yenile</button>
           </div>
         )}
 
@@ -708,12 +695,12 @@ export default function RutinOnline() {
           {routines.length > 0 && (
             <div style={{ ...S.card, marginBottom:18, position:"relative", overflow:"hidden" }}>
               <div style={{ position:"absolute", top:0, left:0, right:0, height:4, background:"#F0FDF4" }}>
-                <div style={{ width:`${progress}%`, height:"100%", background:"linear-gradient(90deg,#16A34A,#4ADE80)", transition:"width 0.4s ease" }} />
+                <div style={{ width:progress + "%", height:"100%", background:"linear-gradient(90deg,#16A34A,#4ADE80)", transition:"width 0.4s ease" }} />
               </div>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:8 }}>
                 <div>
                   <div style={{ fontSize:20, fontWeight:800, color:"#111" }}>{todayCompleted}/{routines.length} tamamlandı</div>
-                  <div style={{ fontSize:13, color:"#9CA3AF", marginTop:2 }}>{progress===100?"🎉 Harika! Hepsini bitirdin!":`${routines.length-todayCompleted} rutin kaldı`}</div>
+                  <div style={{ fontSize:13, color:"#9CA3AF", marginTop:2 }}>{progress===100?"🎉 Harika! Hepsini bitirdin!":(routines.length-todayCompleted) + " rutin kaldi"}</div>
                 </div>
                 <div style={{ fontSize:36, fontWeight:900, color:progress===100?"#16A34A":"#374151" }}>{progress}%</div>
               </div>
@@ -738,7 +725,7 @@ export default function RutinOnline() {
             {routines.map(r => {
               const done = isCompletedToday(r.id);
               return (
-                <div key={r.id} style={{ ...S.card, display:"flex", alignItems:"center", gap:14, background:done?"#F0FDF4":"white", border:`1px solid ${done?"#BBF7D0":"#E8F5E9"}`, padding:"14px 16px", transition:"all 0.15s" }}>
+                <div key={r.id} style={{ ...S.card, display:"flex", alignItems:"center", gap:14, background:done?"#F0FDF4":"white", border:"1px solid " + (done?"#BBF7D0":"#E8F5E9"), padding:"14px 16px", transition:"all 0.15s" }}>
                   <div onClick={() => toggle(r.id)} style={{ width:44, height:44, borderRadius:"50%", background:done?"#DCFCE7":"#F9FAFB", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0, cursor:"pointer" }}>{r.emoji}</div>
                   <div onClick={() => toggle(r.id)} style={{ flex:1, cursor:"pointer" }}>
                     <div style={{ fontSize:15, fontWeight:600, color:done?"#16A34A":"#111", textDecoration:done?"line-through":"none" }}>{r.title}</div>
@@ -751,7 +738,7 @@ export default function RutinOnline() {
                     <button onClick={() => { setEditR({...r}); setScreen(SCREENS.EDIT); }} style={{ width:32, height:32, borderRadius:8, background:"#F3F4F6", border:"none", cursor:"pointer", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✏️</button>
                     <button onClick={() => setDeleteConfirm(r.id)} style={{ width:32, height:32, borderRadius:8, background:"#FEF2F2", border:"none", cursor:"pointer", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>🗑️</button>
                   </div>
-                  <div onClick={() => toggle(r.id)} style={{ width:28, height:28, borderRadius:"50%", background:done?"#16A34A":"transparent", border:`2px solid ${done?"#16A34A":"#D1D5DB"}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer", transition:"all 0.2s" }}>
+                  <div onClick={() => toggle(r.id)} style={{ width:28, height:28, borderRadius:"50%", background:done?"#16A34A":"transparent", border:"2px solid " + (done?"#16A34A":"#D1D5DB"), display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer", transition:"all 0.2s" }}>
                     {done && <svg width="14" height="14" viewBox="0 0 14 14"><polyline points="2,7 5.5,10.5 12,3" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </div>
                 </div>
@@ -815,7 +802,7 @@ export default function RutinOnline() {
   if (screen === SCREENS.ADD) return (
     <div style={S.app}>
       <nav style={S.nav}>
-        <button onClick={() => setScreen(SCREENS.DASHBOARD)} style={{ background:"transparent", border:"none", fontSize:22, cursor:"pointer", color:"#6B7280" }}>←</button>
+        <button onClick={() => setScreen(SCREENS.DASHBOARD)} style={{ background:"transparent", border:"none", fontSize:22, cursor:"pointer", color:"#6B7280" }}> </button>
         <div style={{ fontSize:16, fontWeight:700 }}>Yeni Rutin</div>
         <div style={{ width:32 }} />
       </nav>
@@ -841,7 +828,7 @@ export default function RutinOnline() {
             <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>EMOJİ</div>
             <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
               {["⭐","🏃","💧","📚","🧘","✍️","🎯","💪","🥗","😴","🎵","🌿"].map(e => (
-                <button key={e} onClick={() => setNewR(p => ({...p,emoji:e}))} style={{ width:44, height:44, borderRadius:12, background:newR.emoji===e?"#DCFCE7":"#F9FAFB", border:`1.5px solid ${newR.emoji===e?"#16A34A":"#E5E7EB"}`, fontSize:22, cursor:"pointer" }}>{e}</button>
+                <button key={e} onClick={() => setNewR(p => ({...p,emoji:e}))} style={{ width:44, height:44, borderRadius:12, background:newR.emoji===e?"#DCFCE7":"#F9FAFB", border:"1.5px solid " + (newR.emoji===e?"#16A34A":"#E5E7EB"), fontSize:22, cursor:"pointer" }}>{e}</button>
               ))}
             </div>
           </div>
@@ -855,7 +842,7 @@ export default function RutinOnline() {
             <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>KATEGORİ</div>
             <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
               {Object.entries(CATS).map(([cat,color]) => (
-                <button key={cat} onClick={() => setNewR(p => ({...p,category:cat}))} style={{ padding:"8px 16px", borderRadius:20, background:newR.category===cat?color:"#F9FAFB", color:newR.category===cat?"white":"#6B7280", border:`1px solid ${newR.category===cat?color:"#E5E7EB"}`, fontSize:13, cursor:"pointer", fontWeight:newR.category===cat?600:400 }}>{cat}</button>
+                <button key={cat} onClick={() => setNewR(p => ({...p,category:cat}))} style={{ padding:"8px 16px", borderRadius:20, background:newR.category===cat?color:"#F9FAFB", color:newR.category===cat?"white":"#6B7280", border:"1px solid " + (newR.category===cat?color:"#E5E7EB"), fontSize:13, cursor:"pointer", fontWeight:newR.category===cat?600:400 }}>{cat}</button>
               ))}
             </div>
           </div>
@@ -869,7 +856,7 @@ export default function RutinOnline() {
   if (screen === SCREENS.EDIT && editR) return (
     <div style={S.app}>
       <nav style={S.nav}>
-        <button onClick={() => { setEditR(null); setScreen(SCREENS.DASHBOARD); }} style={{ background:"transparent", border:"none", fontSize:22, cursor:"pointer", color:"#6B7280" }}>←</button>
+        <button onClick={() => { setEditR(null); setScreen(SCREENS.DASHBOARD); }} style={{ background:"transparent", border:"none", fontSize:22, cursor:"pointer", color:"#6B7280" }}> </button>
         <div style={{ fontSize:16, fontWeight:700 }}>Rutini Düzenle</div>
         <div style={{ width:32 }} />
       </nav>
@@ -878,7 +865,7 @@ export default function RutinOnline() {
           <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>EMOJİ</div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             {["⭐","🏃","💧","📚","🧘","✍️","🎯","💪","🥗","😴","🎵","🌿"].map(e => (
-              <button key={e} onClick={() => setEditR(p => ({...p,emoji:e}))} style={{ width:44, height:44, borderRadius:12, background:editR.emoji===e?"#DCFCE7":"#F9FAFB", border:`1.5px solid ${editR.emoji===e?"#16A34A":"#E5E7EB"}`, fontSize:22, cursor:"pointer" }}>{e}</button>
+              <button key={e} onClick={() => setEditR(p => ({...p,emoji:e}))} style={{ width:44, height:44, borderRadius:12, background:editR.emoji===e?"#DCFCE7":"#F9FAFB", border:"1.5px solid " + (editR.emoji===e?"#16A34A":"#E5E7EB"), fontSize:22, cursor:"pointer" }}>{e}</button>
             ))}
           </div>
         </div>
@@ -892,7 +879,7 @@ export default function RutinOnline() {
           <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>KATEGORİ</div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             {Object.entries(CATS).map(([cat,color]) => (
-              <button key={cat} onClick={() => setEditR(p => ({...p,category:cat}))} style={{ padding:"8px 16px", borderRadius:20, background:editR.category===cat?color:"#F9FAFB", color:editR.category===cat?"white":"#6B7280", border:`1px solid ${editR.category===cat?color:"#E5E7EB"}`, fontSize:13, cursor:"pointer", fontWeight:editR.category===cat?600:400 }}>{cat}</button>
+              <button key={cat} onClick={() => setEditR(p => ({...p,category:cat}))} style={{ padding:"8px 16px", borderRadius:20, background:editR.category===cat?color:"#F9FAFB", color:editR.category===cat?"white":"#6B7280", border:"1px solid " + (editR.category===cat?color:"#E5E7EB"), fontSize:13, cursor:"pointer", fontWeight:editR.category===cat?600:400 }}>{cat}</button>
             ))}
           </div>
         </div>
@@ -908,13 +895,13 @@ export default function RutinOnline() {
   if (screen === SCREENS.STATS) return (
     <div style={S.app}>
       <nav style={S.nav}>
-        <button onClick={() => setScreen(SCREENS.DASHBOARD)} style={{ background:"transparent", border:"none", fontSize:22, cursor:"pointer", color:"#6B7280" }}>←</button>
+        <button onClick={() => setScreen(SCREENS.DASHBOARD)} style={{ background:"transparent", border:"none", fontSize:22, cursor:"pointer", color:"#6B7280" }}> </button>
         <div style={{ fontSize:16, fontWeight:700 }}>İstatistikler</div>
         <div style={{ width:32 }} />
       </nav>
       <div style={{ maxWidth:480, margin:"0 auto", padding:"24px 20px" }}>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:20 }}>
-          {[["🔥","En uzun seri",`${Math.max(0,...routines.map(r=>r.streak||0))} gün`],["✅","Toplam rutin",`${routines.length} adet`],["⭐","Bugün",`${todayCompleted}/${routines.length}`],["📅","Tamamlanan",`${completions.length} gün`]].map(([e,l,v]) => (
+          {[["🔥","En uzun seri",Math.max(0,...routines.map(r=>r.streak||0)) + " gun"],["OK","Toplam rutin",routines.length + " adet"],["⭐","Bugün",todayCompleted + "/" + routines.length],["📅","Tamamlanan",`${completions.length} gün`]].map(([e,l,v]) => (
             <div key={l} style={{ ...S.card, textAlign:"center" }}>
               <div style={{ fontSize:28, marginBottom:6 }}>{e}</div>
               <div style={{ fontSize:20, fontWeight:800, color:"#111", marginBottom:2 }}>{v}</div>
@@ -933,7 +920,7 @@ export default function RutinOnline() {
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:13, fontWeight:500, color:"#374151", marginBottom:4 }}>{r.title}</div>
                     <div style={{ background:"#F3F4F6", borderRadius:4, height:6, overflow:"hidden" }}>
-                      <div style={{ width:`${pct}%`, height:"100%", background:"#16A34A", borderRadius:4 }} />
+                      <div style={{ width:pct + "%", height:"100%", background:"#16A34A", borderRadius:4 }} />
                     </div>
                   </div>
                   <div style={{ fontSize:12, color:"#9CA3AF", minWidth:40, textAlign:"right" }}>🔥 {r.streak||0}</div>
