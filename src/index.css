@@ -1,0 +1,17 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #F8FAF8;
+}
+
+/* Mobilde çift tıklama zoom'u engelle */
+button { touch-action: manipulation; }
+
+/* Scrollbar gizle ama çalışsın */
+::-webkit-scrollbar { width: 0; height: 0; }
