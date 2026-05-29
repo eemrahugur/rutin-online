@@ -308,7 +308,7 @@ export default function RutinOnline() {
         <p style={{ fontSize:16, color:"#6B7280", lineHeight:1.75, marginBottom:40 }}>Kendi rutinlerini oluştur, takip et, geliştir.<br />Her gün biraz daha iyi bir sen.</p>
         <div style={{ ...S.card, marginBottom:20, background:"linear-gradient(135deg,#F0FDF4,#DCFCE7)", border:"1.5px solid #86EFAC" }}>
           <div style={{ fontSize:13, color:"#16A34A", fontWeight:700, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>Tek Seferlik Ödeme</div>
-          <div style={{ fontSize:48, fontWeight:900, color:"#111", lineHeight:1 }}>249₺</div>
+          <div style={{ fontSize:48, fontWeight:900, color:"#111", lineHeight:1 }}>199₺</div>
           <div style={{ fontSize:14, color:"#6B7280", margin:"8px 0 20px" }}>1 Yıllık Tam Erişim · Sınırsız Rutin</div>
           <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:24, textAlign:"left" }}>
             {["✅ İstediğin rutinleri kendin oluştur","✅ Tüm cihazlarda senkronize","✅ Seri takibi & motivasyon sistemi","✅ Tamamlanmayan rutinler için bildirim","✅ Tek ödeme, abonelik yok"].map(f => (
@@ -409,7 +409,7 @@ export default function RutinOnline() {
         <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:10, padding:"12px 16px", fontSize:13, color:"#DC2626", marginBottom:28 }}>Rutinlerine tekrar erişmek için lisansını yenile.</div>
         <div style={{ background:"#F0FDF4", border:"1.5px solid #BBF7D0", borderRadius:14, padding:"20px", marginBottom:20 }}>
           <div style={{ fontSize:13, color:"#16A34A", fontWeight:600, marginBottom:4 }}>Yenileme Fiyatı</div>
-          <div style={{ fontSize:42, fontWeight:900, color:"#111" }}>249₺</div>
+          <div style={{ fontSize:42, fontWeight:900, color:"#111" }}>199₺</div>
           <div style={{ fontSize:13, color:"#9CA3AF" }}>+ 1 yıl daha tam erişim</div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
