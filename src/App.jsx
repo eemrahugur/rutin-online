@@ -27,6 +27,24 @@ const TODAY = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
 const CATS = { spor:"#16A34A", sağlık:"#0EA5E9", gelişim:"#7C3AED", zihin:"#F59E0B" };
 const SCREENS = { LANDING:"landing", ACTIVATE:"activate", REGISTER:"register", LOGIN:"login", EXPIRED:"expired", DASHBOARD:"dashboard", ADD:"add", EDIT:"edit", STATS:"stats", PROFILE:"profile" };
 
+// Haftanın günlerini gerçek tarihe çevir
+function getWeekDates() {
+  const now = new Date();
+  const day = now.getDay(); // 0=Pazar
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+function dateToStr(d) { return d.toISOString().split("T")[0]; }
+function formatDayLabel(d) { return d.getDate() + ""; }
+function formatFullDate(d) {
+  return d.toLocaleDateString("tr-TR", { day:"numeric", month:"long", year:"numeric", weekday:"long" });
+}
+
 const EXAMPLE_ROUTINES = [
   { emoji:"📚", title:"Günde 30 dk kitap oku", time:"21:00", category:"gelişim" },
   { emoji:"🏃", title:"Günde 45 dk egzersiz yap", time:"07:00", category:"spor" },
@@ -152,6 +170,7 @@ export default function RutinOnline() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [profileForm, setProfileForm] = useState({ fullName:"", currentPass:"", newPass:"", confirmPass:"" });
   const [profileMsg, setProfileMsg] = useState({ text:"", ok:true });
+  const [dayDetail, setDayDetail] = useState(null); // { date, label }
   const menuRef = useRef(null);
 
   const isIos = () => /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
@@ -611,11 +630,23 @@ export default function RutinOnline() {
             </div>
           )}
           <div style={{ display:"flex", gap:8, marginBottom:20, overflowX:"auto", paddingBottom:4 }}>
-            {DAYS.map((d,i) => (
-              <button key={d} onClick={() => setSelectedDay(i)} style={{ ...S.btn(selectedDay===i?"#16A34A":"white", selectedDay===i?"white":"#6B7280"), minWidth:52, padding:"10px 8px", borderRadius:12, fontSize:13, fontWeight:selectedDay===i?700:400, border:selectedDay===i?"none":"1px solid #E5E7EB", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
-                <span style={{ fontSize:11 }}>{d}</span><span style={{ fontSize:16, fontWeight:700 }}>{i+10}</span>
-              </button>
-            ))}
+            {getWeekDates().map((d, i) => {
+              const dateStr = dateToStr(d);
+              const isToday = i === TODAY;
+              const isSelected = selectedDay === i;
+              const dayCompletions = completions.filter(c => c.completed_date === dateStr);
+              const hasActivity = dayCompletions.length > 0;
+              return (
+                <button key={i} onClick={() => {
+                  setSelectedDay(i);
+                  if (i !== TODAY) setDayDetail({ date:dateStr, label:formatFullDate(d), index:i });
+                }} style={{ ...S.btn(isSelected?"#16A34A":"white", isSelected?"white":"#6B7280"), minWidth:52, padding:"10px 8px", borderRadius:12, fontSize:13, fontWeight:isSelected?700:400, border:isSelected?"none":"1px solid #E5E7EB", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:2, position:"relative" }}>
+                  <span style={{ fontSize:11 }}>{DAYS[i]}</span>
+                  <span style={{ fontSize:16, fontWeight:700 }}>{formatDayLabel(d)}</span>
+                  {hasActivity && <span style={{ width:6, height:6, borderRadius:"50%", background:isSelected?"rgba(255,255,255,0.8)":"#16A34A", position:"absolute", bottom:4 }} />}
+                </button>
+              );
+            })}
           </div>
           <div style={{ marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div style={{ fontSize:15, fontWeight:700, color:"#111" }}>Rutinlerin {routines.length > 0 && <span style={{ fontSize:13, color:"#9CA3AF", fontWeight:400 }}>({routines.length})</span>}</div>
@@ -673,6 +704,56 @@ export default function RutinOnline() {
             <div style={{ fontSize:24, fontWeight:800, color:expiringSoon?"#DC2626":"#16A34A" }}>{remaining}g</div>
           </div>
         </div>
+        {dayDetail && (
+          <div onClick={() => setDayDetail(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:100, padding:20 }}>
+            <div onClick={e => e.stopPropagation()} style={{ ...S.card, width:"100%", maxWidth:480, padding:28, borderRadius:24, maxHeight:"80vh", overflowY:"auto" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+                <div>
+                  <div style={{ fontSize:16, fontWeight:800, color:"#111", marginBottom:4 }}>{dayDetail.label}</div>
+                  <div style={{ fontSize:13, color:"#9CA3AF" }}>
+                    {completions.filter(c => c.completed_date === dayDetail.date).length > 0
+                      ? completions.filter(c => c.completed_date === dayDetail.date).length + " rutin tamamlandı"
+                      : "Bu gün rutin tamamlanmadı"}
+                  </div>
+                </div>
+                <button onClick={() => setDayDetail(null)} style={{ background:"#F3F4F6", border:"none", borderRadius:10, width:32, height:32, cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center", color:"#6B7280" }}>X</button>
+              </div>
+
+              {routines.length === 0 ? (
+                <div style={{ textAlign:"center", padding:"20px 0", color:"#9CA3AF", fontSize:14 }}>Henüz rutin eklenmemiş.</div>
+              ) : (
+                <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                  {routines.map(r => {
+                    const done = completions.some(c => c.routine_id === r.id && c.completed_date === dayDetail.date);
+                    return (
+                      <div key={r.id} style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px", background:done?"#F0FDF4":"#F9FAFB", borderRadius:14, border:"1px solid " + (done?"#BBF7D0":"#E5E7EB"), opacity:done?1:0.5 }}>
+                        <div style={{ width:40, height:40, borderRadius:"50%", background:done?"#DCFCE7":"#F3F4F6", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{r.emoji}</div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:14, fontWeight:600, color:done?"#16A34A":"#9CA3AF", textDecoration:done?"none":"line-through" }}>{r.title}</div>
+                          <div style={{ fontSize:12, color:"#9CA3AF", marginTop:2 }}>{r.time || "—"}</div>
+                        </div>
+                        <div style={{ width:28, height:28, borderRadius:"50%", background:done?"#16A34A":"transparent", border:"2px solid " + (done?"#16A34A":"#D1D5DB"), display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                          {done && <svg width="14" height="14" viewBox="0 0 14 14"><polyline points="2,7 5.5,10.5 12,3" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {completions.filter(c => c.completed_date === dayDetail.date).length > 0 && (
+                <div style={{ marginTop:16, padding:"12px 16px", background:"#F0FDF4", borderRadius:12, textAlign:"center" }}>
+                  <div style={{ fontSize:13, color:"#16A34A", fontWeight:600 }}>
+                    {Math.round((completions.filter(c => c.completed_date === dayDetail.date).length / routines.length) * 100)}% başarı oranı
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginTop:16, fontSize:12, color:"#D1D5DB", textAlign:"center" }}>Bu gün salt okunur modda görüntüleniyor</div>
+            </div>
+          </div>
+        )}
+
         {deleteConfirm && (
           <div onClick={() => setDeleteConfirm(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:20 }}>
             <div onClick={e => e.stopPropagation()} style={{ ...S.card, maxWidth:340, width:"100%", padding:28, textAlign:"center" }}>
