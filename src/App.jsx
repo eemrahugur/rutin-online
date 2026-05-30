@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 const SUPABASE_URL = "https://yzziswewoagxmbknthwo.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl6emlzd2V3b2FneG1ia250aHdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNzIyMTUsImV4cCI6MjA5NTY0ODIxNX0.MSWJ6RDsxIQUnoHL3NQRaDtAaTZyDHoQ8kBcziuW3vw";
@@ -8,13 +8,7 @@ const SATIN_AL_URL = "https://gitsinkilolar.myikas.com/rutinonline";
 
 const api = async (path, options = {}) => {
   const res = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
-    headers: {
-      "apikey": SUPABASE_KEY,
-      "Authorization": "Bearer " + SUPABASE_KEY,
-      "Content-Type": "application/json",
-      "Prefer": options.prefer || "return=representation",
-      ...options.headers,
-    },
+    headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json", "Prefer": options.prefer || "return=representation", ...options.headers },
     ...options,
   });
   if (!res.ok) { const err = await res.json(); throw new Error(err.message || "API hatası"); }
@@ -25,25 +19,14 @@ const api = async (path, options = {}) => {
 const DAYS = ["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"];
 const TODAY = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
 const CATS = { spor:"#16A34A", sağlık:"#0EA5E9", gelişim:"#7C3AED", zihin:"#F59E0B" };
-const SCREENS = { LANDING:"landing", ACTIVATE:"activate", REGISTER:"register", LOGIN:"login", EXPIRED:"expired", DASHBOARD:"dashboard", ADD:"add", EDIT:"edit", STATS:"stats", PROFILE:"profile" };
+const SCREENS = { LANDING:"landing", ACTIVATE:"activate", REGISTER:"register", LOGIN:"login", EXPIRED:"expired", ONBOARDING:"onboarding", DASHBOARD:"dashboard", ADD:"add", EDIT:"edit", STATS:"stats", PROFILE:"profile", WEEKLY:"weekly" };
 
-// Haftanın günlerini gerçek tarihe çevir
-function getWeekDates() {
-  const now = new Date();
-  const day = now.getDay(); // 0=Pazar
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
-}
-function dateToStr(d) { return d.toISOString().split("T")[0]; }
-function formatDayLabel(d) { return d.getDate() + ""; }
-function formatFullDate(d) {
-  return d.toLocaleDateString("tr-TR", { day:"numeric", month:"long", year:"numeric", weekday:"long" });
-}
+const ONBOARDING_STEPS = [
+  { emoji:"👋", title:"Hoş geldin!", desc:"rutin.online ile günlük alışkanlıklarını takip etmek çok kolay. Seni 3 adımda tanıtalım.", btn:"Başlayalım" },
+  { emoji:"➕", title:"Rutin ekle", desc:"İstediğin alışkanlığı ekle — sabah koşusu, kitap okuma, su içme... Her şey senin kontrolünde.", btn:"Anladım" },
+  { emoji:"✅", title:"Her gün tamamla", desc:"Rutinine tıkla ve tamamlandı olarak işaretle. Seri uzadıkça motivasyon artar!", btn:"Harika" },
+  { emoji:"📊", title:"Gelişimini izle", desc:"İstatistik sayfasında ne kadar ilerlediğini gör. Bugüne kadar kaç km yürüdün, kaç sayfa okudun...", btn:"Hadi Başlayalım!" },
+];
 
 const EXAMPLE_ROUTINES = [
   { emoji:"📚", title:"Günde 30 dk kitap oku", time:"21:00", category:"gelişim" },
@@ -79,6 +62,73 @@ const Logo = ({ size=28, textSize=22, dotSize=13, color="#16A34A", light="#86EFA
 function daysLeft(date) { return Math.max(0, Math.ceil((new Date(date) - Date.now()) / 86400000)); }
 function formatDate(date) { return new Date(date).toLocaleDateString("tr-TR", { day:"numeric", month:"long", year:"numeric" }); }
 function todayDate() { return new Date().toISOString().split("T")[0]; }
+function getWeekDates() {
+  const now = new Date(); const day = now.getDay();
+  const monday = new Date(now); monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+  return Array.from({ length:7 }, (_,i) => { const d = new Date(monday); d.setDate(monday.getDate()+i); return d; });
+}
+function dateToStr(d) { return d.toISOString().split("T")[0]; }
+function formatDayLabel(d) { return d.getDate() + ""; }
+function formatFullDate(d) { return d.toLocaleDateString("tr-TR", { day:"numeric", month:"long", year:"numeric", weekday:"long" }); }
+
+function calcFunStats(routines, completions) {
+  const stats = [];
+  const uniqueDays = new Set(completions.map(c => c.completed_date)).size;
+  const totalDays = completions.length;
+  if (uniqueDays > 0) stats.push({ emoji:"🗓️", label:"Rutinini takip ettiğin gün", value:uniqueDays + " gün", color:"#16A34A" });
+  if (totalDays > 0) stats.push({ emoji:"✅", label:"Toplam tamamlanan rutin", value:totalDays + " kez", color:"#0EA5E9" });
+  const catCounts = {};
+  routines.forEach(r => { catCounts[r.category] = (catCounts[r.category]||0) + completions.filter(c => c.routine_id === r.id).length; });
+  if (catCounts["spor"] > 0) {
+    stats.push({ emoji:"🏃", label:"Egzersiz yaptığın gün", value:catCounts["spor"] + " gün", color:"#16A34A" });
+    stats.push({ emoji:"📍", label:"Tahminen koştuğun mesafe", value:Math.round(catCounts["spor"]*5.5) + " km", color:"#16A34A" });
+    stats.push({ emoji:"🔥", label:"Tahminen yaktığın kalori", value:(catCounts["spor"]*320).toLocaleString("tr-TR") + " kcal", color:"#F59E0B" });
+    stats.push({ emoji:"⏱️", label:"Egzersizde geçirdiğin süre", value:Math.round(catCounts["spor"]*45/60) + " saat", color:"#16A34A" });
+  }
+  if (catCounts["sağlık"] > 0) {
+    const litre = catCounts["sağlık"]*2;
+    stats.push({ emoji:"💧", label:"İçtiğin toplam su", value:litre + " litre", color:"#0EA5E9" });
+    if (litre > 0) stats.push({ emoji:"🌊", label:"Bu su ile doldurulabilecek küvet", value:Math.round(litre/150) + " küvet", color:"#0EA5E9" });
+  }
+  if (catCounts["gelişim"] > 0) {
+    const sayfa = catCounts["gelişim"]*25;
+    stats.push({ emoji:"📚", label:"Okuduğun tahmini sayfa", value:sayfa + " sayfa", color:"#7C3AED" });
+    stats.push({ emoji:"🧠", label:"Kendine yatırdığın süre", value:Math.round(catCounts["gelişim"]*30/60) + " saat", color:"#7C3AED" });
+    if (sayfa > 200) stats.push({ emoji:"📖", label:"Bitirdiğin tahmini kitap", value:Math.round(sayfa/250) + " kitap", color:"#7C3AED" });
+  }
+  if (catCounts["zihin"] > 0) {
+    stats.push({ emoji:"🧘", label:"Meditasyon günü", value:catCounts["zihin"] + " gün", color:"#F59E0B" });
+    stats.push({ emoji:"☮️", label:"Zihninle baş başa kaldığın süre", value:(catCounts["zihin"]*10) + " dakika", color:"#F59E0B" });
+  }
+  const maxStreak = Math.max(0, ...routines.map(r => r.streak||0));
+  if (maxStreak >= 7) stats.push({ emoji:"🔥", label:"En uzun seri", value:maxStreak + " gün üst üste", color:"#EF4444" });
+  if (maxStreak >= 30) stats.push({ emoji:"👑", label:"30 gün serisi — harika!", value:"Tebrikler!", color:"#F59E0B" });
+  return stats;
+}
+
+// Konfeti bileşeni
+function Konfeti({ show }) {
+  const colors = ["#16A34A","#4ADE80","#F59E0B","#EF4444","#7C3AED","#0EA5E9","#FFD700"];
+  if (!show) return null;
+  return (
+    <div style={{ position:"fixed", inset:0, pointerEvents:"none", zIndex:500, overflow:"hidden" }}>
+      {Array.from({ length:40 }).map((_,i) => (
+        <div key={i} style={{
+          position:"absolute",
+          left:Math.random()*100 + "%",
+          top:"-10px",
+          width:8 + Math.random()*6,
+          height:8 + Math.random()*6,
+          background:colors[i % colors.length],
+          borderRadius:Math.random() > 0.5 ? "50%" : "2px",
+          animation:"fall " + (1.5 + Math.random()*2) + "s " + (Math.random()*0.5) + "s linear forwards",
+          transform:"rotate(" + (Math.random()*360) + "deg)",
+        }} />
+      ))}
+      <style>{`@keyframes fall { to { transform: translateY(110vh) rotate(720deg); opacity:0; } }`}</style>
+    </div>
+  );
+}
 
 const S = {
   app: { minHeight:"100vh", background:"#F8FAF8", fontFamily:"'Segoe UI', system-ui, sans-serif", color:"#1A2E1A" },
@@ -87,63 +137,6 @@ const S = {
   card: { background:"white", borderRadius:16, padding:"20px", boxShadow:"0 1px 4px rgba(0,0,0,0.06)", border:"1px solid #E8F5E9" },
   input: { width:"100%", border:"1.5px solid #E5E7EB", borderRadius:12, padding:"13px 16px", fontSize:15, outline:"none", boxSizing:"border-box", color:"#111", fontFamily:"inherit" },
 };
-
-// Fun stats hesapla
-function calcFunStats(routines, completions) {
-  const stats = [];
-  const totalDays = completions.length;
-  const uniqueDays = new Set(completions.map(c => c.completed_date)).size;
-
-  // Genel
-  if (uniqueDays > 0) {
-    stats.push({ emoji:"🗓️", label:"Rutinini takip ettiğin gün", value: uniqueDays + " gün", color:"#16A34A" });
-  }
-  if (totalDays > 0) {
-    stats.push({ emoji:"✅", label:"Toplam tamamlanan rutin", value: totalDays + " kez", color:"#0EA5E9" });
-  }
-
-  // Kategoriye göre
-  const catCounts = {};
-  routines.forEach(r => { catCounts[r.category] = (catCounts[r.category] || 0) + completions.filter(c => c.routine_id === r.id).length; });
-
-  if (catCounts["spor"] > 0) {
-    const mins = catCounts["spor"] * 45;
-    const km = Math.round(catCounts["spor"] * 5.5);
-    const cal = catCounts["spor"] * 320;
-    stats.push({ emoji:"🏃", label:"Egzersiz yaptığın gün", value: catCounts["spor"] + " gün", color:"#16A34A" });
-    stats.push({ emoji:"📍", label:"Tahminen koştuğun mesafe", value: km + " km", color:"#16A34A" });
-    stats.push({ emoji:"🔥", label:"Tahminen yaktığın kalori", value: cal.toLocaleString("tr-TR") + " kcal", color:"#F59E0B" });
-    stats.push({ emoji:"⏱️", label:"Egzersizde geçirdiğin süre", value: Math.round(mins/60) + " saat", color:"#16A34A" });
-  }
-
-  if (catCounts["sağlık"] > 0) {
-    const litre = catCounts["sağlık"] * 2;
-    stats.push({ emoji:"💧", label:"İçtiğin toplam su", value: litre + " litre", color:"#0EA5E9" });
-    stats.push({ emoji:"🥗", label:"Sağlıklı öğün günü", value: catCounts["sağlık"] + " gün", color:"#0EA5E9" });
-    if (litre > 0) stats.push({ emoji:"🌊", label:"Bu su ile doldurulabilecek küvet", value: Math.round(litre / 150) + " küvet", color:"#0EA5E9" });
-  }
-
-  if (catCounts["gelişim"] > 0) {
-    const sayfa = catCounts["gelişim"] * 25;
-    const dakika = catCounts["gelişim"] * 30;
-    stats.push({ emoji:"📚", label:"Okuduğun tahmini sayfa", value: sayfa + " sayfa", color:"#7C3AED" });
-    stats.push({ emoji:"🧠", label:"Kendine yatırdığın süre", value: Math.round(dakika/60) + " saat", color:"#7C3AED" });
-    if (sayfa > 200) stats.push({ emoji:"📖", label:"Bu sayfa ile okunabilecek kitap", value: Math.round(sayfa/250) + " kitap", color:"#7C3AED" });
-  }
-
-  if (catCounts["zihin"] > 0) {
-    const dakika = catCounts["zihin"] * 10;
-    stats.push({ emoji:"🧘", label:"Meditasyon günü", value: catCounts["zihin"] + " gün", color:"#F59E0B" });
-    stats.push({ emoji:"☮️", label:"Zihninle baş başa kaldığın süre", value: dakika + " dakika", color:"#F59E0B" });
-  }
-
-  // Streak
-  const maxStreak = Math.max(0, ...routines.map(r => r.streak || 0));
-  if (maxStreak >= 7) stats.push({ emoji:"🔥", label:"En uzun seri", value: maxStreak + " gün üst üste", color:"#EF4444" });
-  if (maxStreak >= 30) stats.push({ emoji:"👑", label:"30 gün serisi — harika!", value: "Tebrikler!", color:"#F59E0B" });
-
-  return stats;
-}
 
 export default function RutinOnline() {
   const [screen, setScreen] = useState(SCREENS.LANDING);
@@ -170,7 +163,11 @@ export default function RutinOnline() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [profileForm, setProfileForm] = useState({ fullName:"", currentPass:"", newPass:"", confirmPass:"" });
   const [profileMsg, setProfileMsg] = useState({ text:"", ok:true });
-  const [dayDetail, setDayDetail] = useState(null); // { date, label }
+  const [dayDetail, setDayDetail] = useState(null);
+  const [onboardStep, setOnboardStep] = useState(0);
+  const [konfeti, setKonfeti] = useState(false);
+  const [streakWarning, setStreakWarning] = useState(null);
+  const [notifPermission, setNotifPermission] = useState("default");
   const menuRef = useRef(null);
 
   const isIos = () => /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
@@ -182,13 +179,35 @@ export default function RutinOnline() {
     if (saved) { const p = JSON.parse(saved); setUser(p.user); setLicense(p.license); setScreen(SCREENS.DASHBOARD); }
     window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); setDeferredPrompt(e); if (!isStandalone()) setShowInstallBanner(true); });
     if (isIos() && !isStandalone()) setShowInstallBanner(true);
+    if ("Notification" in window) setNotifPermission(Notification.permission);
     document.addEventListener("mousedown", e => { if (menuRef.current && !menuRef.current.contains(e.target)) setShowUserMenu(false); });
+    registerServiceWorker();
+    checkStreakWarnings();
   }, []);
+
+  const registerServiceWorker = async () => {
+    if ("serviceWorker" in navigator) {
+      try { await navigator.serviceWorker.register("/sw.js"); } catch(e) { console.log("SW:", e); }
+    }
+  };
+
+  const checkStreakWarnings = () => {
+    const lastUsed = localStorage.getItem("last_used_date");
+    const today = todayDate();
+    if (lastUsed && lastUsed !== today) {
+      const yesterday = new Date(); yesterday.setDate(yesterday.getDate()-1);
+      const yesterdayStr = dateToStr(yesterday);
+      if (lastUsed === yesterdayStr) {
+        // Dün kullandı, bugün henüz açmadı - streak tehlikede
+        setStreakWarning("Serilerin tehlikede! Bugün rutinlerini tamamlamayı unutma.");
+      }
+    }
+    localStorage.setItem("last_used_date", today);
+  };
 
   useEffect(() => { if (user) { loadRoutines(); loadCompletions(); } }, [user]);
 
-  const showToast = (msg, color="#16A34A") => { setToast({ msg, color }); setTimeout(() => setToast(null), 2500); };
-
+  const showToast = (msg, color="#16A34A") => { setToast({ msg, color }); setTimeout(() => setToast(null), 2800); };
   const navigate = (to) => { setPrevScreen(screen); setScreen(to); };
   const goBack = () => { setScreen(prevScreen || SCREENS.DASHBOARD); setPrevScreen(null); };
 
@@ -196,6 +215,26 @@ export default function RutinOnline() {
     if (isIos()) { setShowIosInstall(true); return; }
     if (deferredPrompt) { deferredPrompt.prompt(); const { outcome } = await deferredPrompt.userChoice; if (outcome === "accepted") setShowInstallBanner(false); setDeferredPrompt(null); }
   };
+
+  const requestNotifications = async () => {
+    if (!("Notification" in window)) { showToast("Tarayıcın bildirim desteklemiyor.", "#EF4444"); return; }
+    const perm = await Notification.requestPermission();
+    setNotifPermission(perm);
+    if (perm === "granted") {
+      showToast("Bildirimler açıldı!");
+      scheduleNotifications();
+    } else { showToast("Bildirim izni reddedildi.", "#F59E0B"); }
+  };
+
+  const scheduleNotifications = useCallback(() => {
+    if ("serviceWorker" in navigator && Notification.permission === "granted") {
+      navigator.serviceWorker.ready.then(sw => {
+        sw.active?.postMessage({ type:"SCHEDULE_REMINDERS", reminders:routines.filter(r => r.time && r.time !== "Gün boyu") });
+      });
+    }
+  }, [routines]);
+
+  useEffect(() => { if (routines.length > 0 && Notification.permission === "granted") scheduleNotifications(); }, [routines, scheduleNotifications]);
 
   const loadRoutines = async () => {
     try { const data = await api("routines?user_id=eq." + user.id + "&order=created_at.asc"); setRoutines(data || []); } catch(e) { console.error(e); }
@@ -206,15 +245,14 @@ export default function RutinOnline() {
 
   const checkLicense = async (key) => {
     const cleanKey = key.trim().toUpperCase();
-    // Check local first
     if (VALID_LICENSES[cleanKey]) {
-      const lic = { license_key: cleanKey, ...VALID_LICENSES[cleanKey], expires_at: VALID_LICENSES[cleanKey].expiresAt };
-      return { ...lic, expired: new Date(lic.expiresAt) < new Date() };
+      const lic = { license_key:cleanKey, ...VALID_LICENSES[cleanKey], expires_at:VALID_LICENSES[cleanKey].expiresAt };
+      return { ...lic, expired:new Date(lic.expiresAt) < new Date() };
     }
     const data = await api("licenses?license_key=ilike." + cleanKey + "&limit=1");
     if (!data || data.length === 0) throw new Error("Geçersiz lisans kodu. Lütfen kontrol et.");
     const lic = data[0];
-    return { ...lic, expired: new Date(lic.expires_at) < new Date() };
+    return { ...lic, expired:new Date(lic.expires_at) < new Date() };
   };
 
   const handleActivate = async () => {
@@ -237,7 +275,7 @@ export default function RutinOnline() {
       const newUser = await api("users", { method:"POST", body:JSON.stringify({ email:regForm.email.trim().toLowerCase(), password_hash:passHash, full_name:regForm.fullName.trim(), license_key:license.license_key }) });
       const u = Array.isArray(newUser) ? newUser[0] : newUser;
       setUser(u); localStorage.setItem("rutin_user", JSON.stringify({ user:u, license }));
-      setScreen(SCREENS.DASHBOARD); showToast("Hoş geldin, " + u.full_name.split(" ")[0] + "!");
+      setScreen(SCREENS.ONBOARDING);
     } catch(e) { setError(e.message || "Kayıt hatası."); } finally { setLoading(false); }
   };
 
@@ -250,7 +288,7 @@ export default function RutinOnline() {
       const u = data[0]; const lic = await checkLicense(u.license_key);
       setUser(u); setLicense(lic); localStorage.setItem("rutin_user", JSON.stringify({ user:u, license:lic }));
       if (lic.expired) { setScreen(SCREENS.EXPIRED); return; }
-      setScreen(SCREENS.DASHBOARD); showToast("Tekrar hoş geldin!");
+      setScreen(SCREENS.DASHBOARD); showToast("Tekrar hoş geldin, " + u.full_name.split(" ")[0] + "!");
     } catch(e) { setError(e.message || "Giriş hatası."); } finally { setLoading(false); }
   };
 
@@ -267,7 +305,7 @@ export default function RutinOnline() {
       await api("users?id=eq." + user.id, { method:"PATCH", body:JSON.stringify({ full_name:profileForm.fullName.trim() }) });
       if (profileForm.newPass) {
         if (profileForm.newPass.length < 6) { setProfileMsg({ text:"Yeni şifre en az 6 karakter olmalı.", ok:false }); return; }
-        if (profileForm.newPass !== profileForm.confirmPass) { setProfileMsg({ text:"Yeni şifreler eşleşmiyor.", ok:false }); return; }
+        if (profileForm.newPass !== profileForm.confirmPass) { setProfileMsg({ text:"Şifreler eşleşmiyor.", ok:false }); return; }
         const oldHash = btoa(profileForm.currentPass + "_rutin_salt");
         const check = await api("users?id=eq." + user.id + "&password_hash=eq." + encodeURIComponent(oldHash) + "&limit=1");
         if (!check || check.length === 0) { setProfileMsg({ text:"Mevcut şifre hatalı.", ok:false }); return; }
@@ -289,14 +327,24 @@ export default function RutinOnline() {
       if (existing) {
         await api("completions?id=eq." + existing.id, { method:"DELETE", prefer:"return=minimal" });
         setCompletions(p => p.filter(c => c.id !== existing.id));
-        await api("routines?id=eq." + routineId, { method:"PATCH", body:JSON.stringify({ streak:Math.max(0,(routine?.streak||1)-1) }) });
-        setRoutines(p => p.map(r => r.id === routineId ? { ...r, streak:Math.max(0,(r.streak||1)-1) } : r));
+        const newStreak = Math.max(0,(routine?.streak||1)-1);
+        await api("routines?id=eq." + routineId, { method:"PATCH", body:JSON.stringify({ streak:newStreak }) });
+        setRoutines(p => p.map(r => r.id === routineId ? { ...r, streak:newStreak } : r));
       } else {
         const data = await api("completions", { method:"POST", body:JSON.stringify({ routine_id:routineId, completed_date:date }) });
         const added = Array.isArray(data) ? data[0] : data;
-        setCompletions(p => [...p, added]);
-        await api("routines?id=eq." + routineId, { method:"PATCH", body:JSON.stringify({ streak:(routine?.streak||0)+1 }) });
-        setRoutines(p => p.map(r => r.id === routineId ? { ...r, streak:(r.streak||0)+1 } : r));
+        setCompletions(p => { const newComps = [...p, added];
+          // Hepsi tamamlandı mı kontrol et
+          const todayDone = routines.filter(r => newComps.some(c => c.routine_id === r.id && c.completed_date === date)).length;
+          if (todayDone === routines.length && routines.length > 0) {
+            setKonfeti(true); setTimeout(() => setKonfeti(false), 3500);
+            showToast("Tüm rutinleri tamamladın! Harika iş!", "#16A34A");
+          }
+          return newComps;
+        });
+        const newStreak = (routine?.streak||0)+1;
+        await api("routines?id=eq." + routineId, { method:"PATCH", body:JSON.stringify({ streak:newStreak }) });
+        setRoutines(p => p.map(r => r.id === routineId ? { ...r, streak:newStreak } : r));
       }
     } catch(e) { showToast("İşlem başarısız.", "#EF4444"); }
   };
@@ -327,42 +375,51 @@ export default function RutinOnline() {
     try {
       await api("routines?id=eq." + id, { method:"DELETE", prefer:"return=minimal" });
       setRoutines(p => p.filter(r => r.id !== id)); setDeleteConfirm(null);
-      showToast((r?.title || "Rutin") + " silindi", "#6B7280");
+      showToast((r?.title||"Rutin") + " silindi", "#6B7280");
       if (screen === SCREENS.EDIT) setScreen(SCREENS.DASHBOARD);
     } catch(e) { showToast("Silinemedi.", "#EF4444"); }
   };
 
   const isCompletedToday = (routineId) => completions.some(c => c.routine_id === routineId && c.completed_date === todayDate());
   const todayCompleted = routines.filter(r => isCompletedToday(r.id)).length;
-  const progress = routines.length ? Math.round((todayCompleted / routines.length) * 100) : 0;
+  const progress = routines.length ? Math.round((todayCompleted/routines.length)*100) : 0;
 
-  // ── NAV BAR ──────────────────────────────────────────────────
+  // Haftalık rapor hesapla
+  const weeklyReport = () => {
+    const weekDates = getWeekDates();
+    const days = weekDates.map((d,i) => {
+      const dateStr = dateToStr(d);
+      const dayCompletions = completions.filter(c => c.completed_date === dateStr);
+      const rate = routines.length ? Math.round((dayCompletions.length/routines.length)*100) : 0;
+      return { day:DAYS[i], date:d.getDate(), dateStr, count:dayCompletions.length, total:routines.length, rate, isToday:i===TODAY };
+    });
+    const totalCompleted = days.reduce((a,d) => a+d.count, 0);
+    const maxPossible = routines.length * 7;
+    const weekRate = maxPossible ? Math.round((totalCompleted/maxPossible)*100) : 0;
+    const bestStreak = Math.max(0, ...routines.map(r => r.streak||0));
+    return { days, totalCompleted, weekRate, bestStreak };
+  };
+
+  // NAV BAR
   const AppNav = ({ showBack=false, showHome=false, title="" }) => (
     <div style={S.nav}>
       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-        {showBack && (
-          <button onClick={goBack} style={{ background:"#F0FDF4", border:"none", borderRadius:10, width:36, height:36, cursor:"pointer", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center", color:"#16A34A" }}>←</button>
-        )}
-        {showHome && (
-          <button onClick={() => setScreen(SCREENS.DASHBOARD)} style={{ background:"#F0FDF4", border:"none", borderRadius:10, width:36, height:36, cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center", color:"#16A34A" }}>🏠</button>
-        )}
+        {showBack && <button onClick={goBack} style={{ background:"#F0FDF4", border:"none", borderRadius:10, width:36, height:36, cursor:"pointer", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center", color:"#16A34A" }}>←</button>}
+        {showHome && <button onClick={() => setScreen(SCREENS.DASHBOARD)} style={{ background:"#F0FDF4", border:"none", borderRadius:10, width:36, height:36, cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center", color:"#16A34A" }}>🏠</button>}
         {!showBack && !showHome && <Logo size={20} textSize={15} dotSize={10} />}
         {title && <span style={{ fontSize:16, fontWeight:700, color:"#111", marginLeft:4 }}>{title}</span>}
       </div>
       {user && (
         <div ref={menuRef} style={{ position:"relative" }}>
           <div onClick={() => setShowUserMenu(p => !p)} style={{ width:36, height:36, borderRadius:"50%", background:"#16A34A", display:"flex", alignItems:"center", justifyContent:"center", color:"white", fontWeight:700, fontSize:15, cursor:"pointer", userSelect:"none" }}>
-            {user.full_name?.[0]?.toUpperCase() || "K"}
+            {user.full_name?.[0]?.toUpperCase()||"K"}
           </div>
           {showUserMenu && (
             <div style={{ position:"absolute", top:44, right:0, background:"white", borderRadius:14, boxShadow:"0 8px 30px rgba(0,0,0,0.12)", border:"1px solid #E8F5E9", minWidth:160, zIndex:100, overflow:"hidden" }}>
               <div style={{ padding:"10px 14px 6px", fontSize:12, color:"#9CA3AF", borderBottom:"1px solid #F3F4F6" }}>{user.full_name}</div>
-              <button onClick={() => { setProfileForm({ fullName:user.full_name, currentPass:"", newPass:"", confirmPass:"" }); setShowUserMenu(false); navigate(SCREENS.PROFILE); }} style={{ width:"100%", background:"transparent", border:"none", padding:"12px 16px", textAlign:"left", fontSize:14, color:"#374151", cursor:"pointer", display:"flex", alignItems:"center", gap:10 }}>
-                👤 Profilim
-              </button>
-              <button onClick={handleLogout} style={{ width:"100%", background:"transparent", border:"none", padding:"12px 16px", textAlign:"left", fontSize:14, color:"#EF4444", cursor:"pointer", display:"flex", alignItems:"center", gap:10, borderTop:"1px solid #F3F4F6" }}>
-                🚪 Çıkış Yap
-              </button>
+              <button onClick={() => { setProfileForm({ fullName:user.full_name, currentPass:"", newPass:"", confirmPass:"" }); setShowUserMenu(false); navigate(SCREENS.PROFILE); }} style={{ width:"100%", background:"transparent", border:"none", padding:"12px 16px", textAlign:"left", fontSize:14, color:"#374151", cursor:"pointer", display:"flex", alignItems:"center", gap:10 }}>👤 Profilim</button>
+              <button onClick={() => { setShowUserMenu(false); navigate(SCREENS.WEEKLY); }} style={{ width:"100%", background:"transparent", border:"none", padding:"12px 16px", textAlign:"left", fontSize:14, color:"#374151", cursor:"pointer", display:"flex", alignItems:"center", gap:10 }}>📅 Haftalık Rapor</button>
+              <button onClick={handleLogout} style={{ width:"100%", background:"transparent", border:"none", padding:"12px 16px", textAlign:"left", fontSize:14, color:"#EF4444", cursor:"pointer", display:"flex", alignItems:"center", gap:10, borderTop:"1px solid #F3F4F6" }}>🚪 Çıkış Yap</button>
             </div>
           )}
         </div>
@@ -370,17 +427,43 @@ export default function RutinOnline() {
     </div>
   );
 
-  // ── SPLASH ───────────────────────────────────────────────────
+  // SPLASH
   if (splash) return (
     <div style={{ ...S.app, display:"flex", alignItems:"center", justifyContent:"center", background:"white" }}>
-      <div style={{ textAlign:"center" }}>
-        <Logo size={52} textSize={30} dotSize={15} />
-        <div style={{ fontSize:13, color:"#86EFAC", marginTop:8, letterSpacing:2 }}>rutinini oluştur</div>
-      </div>
+      <div style={{ textAlign:"center" }}><Logo size={52} textSize={30} dotSize={15} /><div style={{ fontSize:13, color:"#86EFAC", marginTop:8, letterSpacing:2 }}>rutinini oluştur</div></div>
     </div>
   );
 
-  // ── LANDING ──────────────────────────────────────────────────
+  // ONBOARDING
+  if (screen === SCREENS.ONBOARDING) {
+    const step = ONBOARDING_STEPS[onboardStep];
+    return (
+      <div style={{ ...S.app, display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh" }}>
+        <div style={{ width:"100%", maxWidth:400, padding:24 }}>
+          <div style={{ display:"flex", gap:6, justifyContent:"center", marginBottom:32 }}>
+            {ONBOARDING_STEPS.map((_,i) => (
+              <div key={i} style={{ width:i===onboardStep?24:8, height:8, borderRadius:4, background:i<=onboardStep?"#16A34A":"#E5E7EB", transition:"all 0.3s" }} />
+            ))}
+          </div>
+          <div style={{ ...S.card, textAlign:"center", padding:"40px 28px" }}>
+            <div style={{ fontSize:72, marginBottom:20 }}>{step.emoji}</div>
+            <div style={{ fontSize:22, fontWeight:800, color:"#111", marginBottom:12 }}>{step.title}</div>
+            <div style={{ fontSize:15, color:"#6B7280", lineHeight:1.75, marginBottom:32 }}>{step.desc}</div>
+            <button onClick={() => {
+              if (onboardStep < ONBOARDING_STEPS.length-1) setOnboardStep(p => p+1);
+              else { setScreen(SCREENS.DASHBOARD); requestNotifications(); }
+            }} style={{ ...S.btn(), width:"100%", borderRadius:14, padding:"16px", fontSize:16, boxShadow:"0 4px 20px rgba(22,163,74,0.3)" }}>{step.btn}</button>
+            {onboardStep < ONBOARDING_STEPS.length-1 && (
+              <button onClick={() => setScreen(SCREENS.DASHBOARD)} style={{ ...S.btn("transparent","#9CA3AF"), width:"100%", padding:"10px", fontSize:13, marginTop:8 }}>Geç</button>
+            )}
+          </div>
+          <div style={{ textAlign:"center", marginTop:16, fontSize:13, color:"#9CA3AF" }}>{onboardStep+1} / {ONBOARDING_STEPS.length}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // LANDING
   if (screen === SCREENS.LANDING) return (
     <div style={S.app}>
       {showIosInstall && (
@@ -437,10 +520,7 @@ export default function RutinOnline() {
               {[["🏃","Günde 45 dk egzersiz yap",true,12],["💧","Günde 2 litre su iç",true,7],["📚","Günde 30 dk kitap oku",false,5]].map(([e,t,done,s]) => (
                 <div key={t} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", background:done?"#F0FDF4":"#FAFAFA", borderRadius:12, border:"1px solid " + (done?"#BBF7D0":"#F3F4F6"), marginBottom:8 }}>
                   <div style={{ width:38, height:38, borderRadius:"50%", background:done?"#DCFCE7":"#F3F4F6", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>{e}</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:13, fontWeight:600, color:done?"#16A34A":"#374151", textDecoration:done?"line-through":"none" }}>{t}</div>
-                    <div style={{ fontSize:11, color:"#F59E0B", fontWeight:600 }}>🔥 {s} gün serisi</div>
-                  </div>
+                  <div style={{ flex:1 }}><div style={{ fontSize:13, fontWeight:600, color:done?"#16A34A":"#374151", textDecoration:done?"line-through":"none" }}>{t}</div><div style={{ fontSize:11, color:"#F59E0B", fontWeight:600 }}>🔥 {s} gün serisi</div></div>
                   <div style={{ width:24, height:24, borderRadius:"50%", background:done?"#16A34A":"transparent", border:"2px solid " + (done?"#16A34A":"#D1D5DB"), display:"flex", alignItems:"center", justifyContent:"center" }}>
                     {done && <svg width="12" height="12" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
                   </div>
@@ -480,7 +560,7 @@ export default function RutinOnline() {
           <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:8 }}>Tanıdık geliyor mu?</div>
           <div style={{ fontSize:14, color:"#9CA3AF", textAlign:"center", marginBottom:24 }}>Yarından itibaren başlıyorum diyenlerin büyük çoğunluğu hiç başlayamıyor.</div>
           <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-            {[["😓","Her sabah aynı his","Alarm çalıyor, erteliyor, suçluluk duyuyorsun. Güne zaten yenik başlıyorsun."],["📋","Liste yapıyorsun ama...","Deftere yazıyorsun ama 3 gün sonra her şey unutuluyor."],["🔁","Sürekli sıfırlıyorsun","Bir hafta harika gidiyor, sonra her şey sıfırlanıyor. Yeniden başlamak giderek zorlaşıyor."],["😤","Motivasyon gelmiyor","Motive olunca başlarım diyorsun ama o gün bir türlü gelmiyor."]].map(([e,t,s]) => (
+            {[["😓","Her sabah aynı his","Alarm çalıyor, erteliyor, suçluluk duyuyorsun. Güne zaten yenik başlıyorsun."],["📋","Liste yapıyorsun ama...","Deftere yazıyorsun ama 3 gün sonra her şey unutuluyor."],["🔁","Sürekli sıfırlıyorsun","Bir hafta harika gidiyor, sonra her şey sıfırlanıyor."],["😤","Motivasyon gelmiyor","Motive olunca başlarım diyorsun ama o gün bir türlü gelmiyor."]].map(([e,t,s]) => (
               <div key={t} style={{ display:"flex", gap:14, padding:"16px 18px", background:"#FFF7ED", borderRadius:14, border:"1px solid #FED7AA" }}>
                 <span style={{ fontSize:24, flexShrink:0 }}>{e}</span>
                 <div><div style={{ fontSize:14, fontWeight:700, color:"#111", marginBottom:4 }}>{t}</div><div style={{ fontSize:13, color:"#6B7280", lineHeight:1.6 }}>{s}</div></div>
@@ -518,7 +598,7 @@ export default function RutinOnline() {
         </div>
         <div style={{ marginBottom:48 }}>
           <div style={{ fontSize:20, fontWeight:800, color:"#111", textAlign:"center", marginBottom:20 }}>Sık Sorulan Sorular</div>
-          {[["Satın aldıktan sonra ne olur?","Ödeme tamamlanınca lisans kodun 24 saat içinde e-posta adresine gönderilir."],["1 yıl sonra ne olur?","1 yıllık kullanım süren dolduğunda uygulama yenileme talep eder."],["Farklı cihazlarda çalışır mı?","Evet! Hesabın her cihazda senkronize çalışır."],["Telefona yükleyebilir miyim?","Evet. Sayfanın üstündeki Telefona Yükle butonuyla ana ekranına ekleyebilirsin."],["İade politikası nedir?","Memnun kalmazsan ilk 7 gün içinde iade yapabiliriz."]].map(([q,a],i) => (
+          {[["Satın aldıktan sonra ne olur?","Ödeme tamamlanınca lisans kodun 24 saat içinde e-posta adresine gönderilir."],["1 yıl sonra ne olur?","1 yıllık kullanım süren dolduğunda uygulama yenileme talep eder."],["Farklı cihazlarda çalışır mı?","Evet! Hesabın her cihazda senkronize çalışır."],["Telefona yükleyebilir miyim?","Evet. Telefona Yükle butonuyla ana ekranına ekleyebilirsin."],["İade politikası nedir?","Memnun kalmazsan ilk 7 gün içinde iade yapabiliriz."]].map(([q,a],i) => (
             <div key={i} style={{ ...S.card, marginBottom:8, cursor:"pointer" }} onClick={() => setFaqOpen(faqOpen===i?null:i)}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <div style={{ fontSize:14, fontWeight:600, color:"#111", paddingRight:12 }}>{q}</div>
@@ -538,7 +618,7 @@ export default function RutinOnline() {
     </div>
   );
 
-  // ── AKTİVASYON ───────────────────────────────────────────────
+  // AKTİVASYON
   if (screen === SCREENS.ACTIVATE) return (
     <div style={{ ...S.app, display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh" }}>
       <div style={{ ...S.card, width:"100%", maxWidth:400, padding:40 }}>
@@ -546,14 +626,14 @@ export default function RutinOnline() {
         <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>LİSANS KODU</div>
         <input value={licenseInput} onChange={e => { setLicenseInput(e.target.value.toUpperCase()); setError(""); }} placeholder="RUTIN-XXXX-XXXX" style={{ ...S.input, letterSpacing:2, fontWeight:600, textAlign:"center", fontSize:18, borderColor:error?"#EF4444":"#E5E7EB", marginBottom:8 }} onKeyDown={e => e.key==="Enter" && handleActivate()} />
         {error && <div style={{ fontSize:12, color:"#EF4444", marginBottom:8, textAlign:"center" }}>{error}</div>}
-        <button onClick={handleActivate} disabled={loading || !licenseInput.trim()} style={{ ...S.btn(loading||!licenseInput.trim()?"#D1D5DB":"#16A34A"), width:"100%", borderRadius:12, padding:"15px", fontSize:15, cursor:loading||!licenseInput.trim()?"not-allowed":"pointer", marginBottom:16 }}>{loading?"Kontrol ediliyor...":"Devam Et"}</button>
+        <button onClick={handleActivate} disabled={loading||!licenseInput.trim()} style={{ ...S.btn(loading||!licenseInput.trim()?"#D1D5DB":"#16A34A"), width:"100%", borderRadius:12, padding:"15px", fontSize:15, cursor:loading||!licenseInput.trim()?"not-allowed":"pointer", marginBottom:16 }}>{loading?"Kontrol ediliyor...":"Devam Et"}</button>
         <div style={{ textAlign:"center", fontSize:13, color:"#9CA3AF" }}>Hesabın var mı? <span onClick={() => setScreen(SCREENS.LOGIN)} style={{ color:"#16A34A", cursor:"pointer", fontWeight:600 }}>Giriş yap</span></div>
         <button onClick={() => setScreen(SCREENS.LANDING)} style={{ ...S.btn("transparent","#9CA3AF"), width:"100%", padding:"10px", fontSize:13, marginTop:8 }}>← Geri</button>
       </div>
     </div>
   );
 
-  // ── KAYIT ────────────────────────────────────────────────────
+  // KAYIT
   if (screen === SCREENS.REGISTER) return (
     <div style={{ ...S.app, display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh" }}>
       <div style={{ ...S.card, width:"100%", maxWidth:400, padding:40 }}>
@@ -568,11 +648,11 @@ export default function RutinOnline() {
     </div>
   );
 
-  // ── GİRİŞ ────────────────────────────────────────────────────
+  // GİRİŞ
   if (screen === SCREENS.LOGIN) return (
     <div style={{ ...S.app, display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh" }}>
       <div style={{ ...S.card, width:"100%", maxWidth:400, padding:40 }}>
-        <div style={{ textAlign:"center", marginBottom:28 }}><Logo size={28} textSize={18} dotSize={11} /><div style={{ fontSize:20, fontWeight:800, color:"#111", marginTop:20, marginBottom:6 }}>Tekrar Hoş Geldin</div><div style={{ fontSize:13, color:"#9CA3AF" }}>E-posta ve şifrenle giriş yap</div></div>
+        <div style={{ textAlign:"center", marginBottom:28 }}><Logo size={28} textSize={18} dotSize={11} /><div style={{ fontSize:20, fontWeight:800, color:"#111", marginTop:20, marginBottom:6 }}>Tekrar Hoş Geldin</div></div>
         {error && <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:10, padding:"10px 14px", fontSize:13, color:"#DC2626", marginBottom:16, textAlign:"center" }}>{error}</div>}
         {[["E-POSTA","email","email","ornek@gmail.com"],["ŞİFRE","password","password","Şifren"]].map(([label,key,type,ph]) => (
           <div key={key} style={{ marginBottom:14 }}><div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:6 }}>{label}</div><input type={type} placeholder={ph} value={loginForm[key]} onChange={e => setLoginForm(p => ({ ...p,[key]:e.target.value }))} style={S.input} onKeyDown={e => e.key==="Enter" && handleLogin()} /></div>
@@ -584,7 +664,7 @@ export default function RutinOnline() {
     </div>
   );
 
-  // ── SÜRESİ DOLMUŞ ────────────────────────────────────────────
+  // SÜRESİ DOLMUŞ
   if (screen === SCREENS.EXPIRED) return (
     <div style={{ ...S.app, display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh" }}>
       <div style={{ ...S.card, width:"100%", maxWidth:420, padding:40, textAlign:"center" }}>
@@ -598,24 +678,37 @@ export default function RutinOnline() {
           <div style={{ fontSize:13, color:"#9CA3AF" }}>+ 1 yıl daha tam erişim</div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          <button onClick={() => window.open("https://wa.me/" + CONTACT_WHATSAPP + "?text=Merhaba, lisansimi yenilemek istiyorum.","_blank")} style={{ ...S.btn("#25D366"), borderRadius:12, padding:"14px", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>💬 WhatsApp ile Yenile</button>
-          <button onClick={() => window.open("mailto:" + CONTACT_EMAIL + "?subject=Lisans Yenileme","_blank")} style={{ ...S.btn("#F9FAFB","#374151"), border:"1px solid #E5E7EB", borderRadius:12, padding:"14px", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>📧 E-posta ile Yenile</button>
+          <button onClick={() => window.open("https://wa.me/" + CONTACT_WHATSAPP + "?text=Merhaba, lisansimi yenilemek istiyorum.","_blank")} style={{ ...S.btn("#25D366"), borderRadius:12, padding:"14px", fontSize:15 }}>💬 WhatsApp ile Yenile</button>
+          <button onClick={() => window.open("mailto:" + CONTACT_EMAIL + "?subject=Lisans Yenileme","_blank")} style={{ ...S.btn("#F9FAFB","#374151"), border:"1px solid #E5E7EB", borderRadius:12, padding:"14px", fontSize:15 }}>📧 E-posta ile Yenile</button>
         </div>
       </div>
     </div>
   );
 
-  // ── DASHBOARD ─────────────────────────────────────────────────
+  // DASHBOARD
   if (screen === SCREENS.DASHBOARD) {
-    const remaining = license ? daysLeft(license.expires_at || license.expiresAt) : 0;
+    const remaining = license ? daysLeft(license.expires_at||license.expiresAt) : 0;
     const expiringSoon = remaining <= 30;
     return (
       <div style={S.app}>
+        <Konfeti show={konfeti} />
         <AppNav />
+        {streakWarning && (
+          <div style={{ background:"#FFF7ED", borderBottom:"1px solid #FED7AA", padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontSize:13, color:"#D97706" }}>⚠️ {streakWarning}</div>
+            <button onClick={() => setStreakWarning(null)} style={{ background:"transparent", border:"none", color:"#9CA3AF", cursor:"pointer", fontSize:16 }}>X</button>
+          </div>
+        )}
         {expiringSoon && (
           <div style={{ background:remaining<=7?"#FEF2F2":"#FFFBEB", borderBottom:"1px solid " + (remaining<=7?"#FECACA":"#FDE68A"), padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div style={{ fontSize:13, color:remaining<=7?"#DC2626":"#D97706" }}>{remaining<=7?"⚠️":"🕐"} Lisansın <strong>{remaining} gün</strong> sonra doluyor</div>
             <button onClick={() => window.open("https://wa.me/" + CONTACT_WHATSAPP + "?text=Lisansimi yenilemek istiyorum.","_blank")} style={{ ...S.btn(remaining<=7?"#DC2626":"#D97706"), padding:"6px 14px", fontSize:12, borderRadius:8 }}>Yenile</button>
+          </div>
+        )}
+        {notifPermission === "default" && routines.length > 0 && (
+          <div style={{ background:"#EFF6FF", borderBottom:"1px solid #BFDBFE", padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontSize:13, color:"#1D4ED8" }}>🔔 Rutin hatırlatıcılarını aç</div>
+            <button onClick={requestNotifications} style={{ ...S.btn("#2563EB"), padding:"6px 14px", fontSize:12, borderRadius:8 }}>İzin Ver</button>
           </div>
         )}
         <div style={{ maxWidth:520, margin:"0 auto", padding:"20px 18px" }}>
@@ -624,16 +717,20 @@ export default function RutinOnline() {
             <div style={{ ...S.card, marginBottom:18, position:"relative", overflow:"hidden" }}>
               <div style={{ position:"absolute", top:0, left:0, right:0, height:4, background:"#F0FDF4" }}><div style={{ width:progress + "%", height:"100%", background:"linear-gradient(90deg,#16A34A,#4ADE80)", transition:"width 0.4s ease" }} /></div>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:8 }}>
-                <div><div style={{ fontSize:20, fontWeight:800, color:"#111" }}>{todayCompleted}/{routines.length} tamamlandı</div><div style={{ fontSize:13, color:"#9CA3AF", marginTop:2 }}>{progress===100?"Harika! Hepsini bitirdin!":(routines.length-todayCompleted) + " rutin kaldı"}</div></div>
+                <div>
+                  <div style={{ fontSize:20, fontWeight:800, color:"#111" }}>{todayCompleted}/{routines.length} tamamlandı</div>
+                  <div style={{ fontSize:13, color:"#9CA3AF", marginTop:2 }}>
+                    {progress===100 ? "🎉 Harika! Hepsini bitirdin!" : (routines.length-todayCompleted) + " rutin kaldı"}
+                  </div>
+                </div>
                 <div style={{ fontSize:36, fontWeight:900, color:progress===100?"#16A34A":"#374151" }}>{progress}%</div>
               </div>
             </div>
           )}
           <div style={{ display:"flex", gap:8, marginBottom:20, overflowX:"auto", paddingBottom:4 }}>
-            {getWeekDates().map((d, i) => {
+            {getWeekDates().map((d,i) => {
               const dateStr = dateToStr(d);
-              const isToday = i === TODAY;
-              const isSelected = selectedDay === i;
+              const isSelected = selectedDay===i;
               const dayCompletions = completions.filter(c => c.completed_date === dateStr);
               const hasActivity = dayCompletions.length > 0;
               return (
@@ -649,33 +746,33 @@ export default function RutinOnline() {
             })}
           </div>
           <div style={{ marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={{ fontSize:15, fontWeight:700, color:"#111" }}>Rutinlerin {routines.length > 0 && <span style={{ fontSize:13, color:"#9CA3AF", fontWeight:400 }}>({routines.length})</span>}</div>
+            <div style={{ fontSize:15, fontWeight:700, color:"#111" }}>Rutinlerin {routines.length>0 && <span style={{ fontSize:13, color:"#9CA3AF", fontWeight:400 }}>({routines.length})</span>}</div>
             <div style={{ display:"flex", gap:8 }}>
-              <button onClick={() => navigate(SCREENS.STATS)} style={{ ...S.btn("#F0FDF4","#16A34A"), padding:"8px 14px", fontSize:13, border:"1px solid #BBF7D0" }}>📊 İstatistik</button>
+              <button onClick={() => navigate(SCREENS.STATS)} style={{ ...S.btn("#F0FDF4","#16A34A"), padding:"8px 14px", fontSize:13, border:"1px solid #BBF7D0" }}>📊</button>
               <button onClick={() => navigate(SCREENS.ADD)} style={{ ...S.btn(), padding:"8px 16px", fontSize:13, borderRadius:10 }}>+ Ekle</button>
             </div>
           </div>
           {routines.length === 0 && (
-            <div style={{ ...S.card, textAlign:"center", padding:"40px 24px" }}>
+            <div style={{ ...S.card, textAlign:"center", padding:"40px 24px", border:"2px dashed #BBF7D0" }}>
               <div style={{ fontSize:48, marginBottom:12 }}>🌱</div>
-              <div style={{ fontSize:17, fontWeight:700, color:"#111", marginBottom:8 }}>Henüz rutinin yok</div>
-              <div style={{ fontSize:14, color:"#9CA3AF", marginBottom:24, lineHeight:1.6 }}>İlk rutinini kendin ekle ya da aşağıdaki önerilerden birini seç.</div>
-              <button onClick={() => navigate(SCREENS.ADD)} style={{ ...S.btn(), padding:"12px 28px", fontSize:14, borderRadius:12 }}>+ İlk Rutinini Ekle</button>
+              <div style={{ fontSize:17, fontWeight:700, color:"#111", marginBottom:8 }}>İlk rutinini ekle!</div>
+              <div style={{ fontSize:14, color:"#9CA3AF", marginBottom:24, lineHeight:1.6 }}>Aşağıdan hazır önerilerden birini seç ya da kendin oluştur.</div>
+              <button onClick={() => navigate(SCREENS.ADD)} style={{ ...S.btn(), padding:"14px 32px", fontSize:15, borderRadius:12, boxShadow:"0 4px 16px rgba(22,163,74,0.25)" }}>+ İlk Rutinini Ekle</button>
             </div>
           )}
           <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
             {routines.map(r => {
               const done = isCompletedToday(r.id);
               return (
-                <div key={r.id} style={{ ...S.card, display:"flex", alignItems:"center", gap:14, background:done?"#F0FDF4":"white", border:"1px solid " + (done?"#BBF7D0":"#E8F5E9"), padding:"14px 16px", transition:"all 0.15s" }}>
+                <div key={r.id} style={{ ...S.card, display:"flex", alignItems:"center", gap:14, background:done?"#F0FDF4":"white", border:"1px solid " + (done?"#BBF7D0":"#E8F5E9"), padding:"14px 16px", transition:"all 0.2s" }}>
                   <div onClick={() => toggle(r.id)} style={{ width:44, height:44, borderRadius:"50%", background:done?"#DCFCE7":"#F9FAFB", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0, cursor:"pointer" }}>{r.emoji}</div>
                   <div onClick={() => toggle(r.id)} style={{ flex:1, cursor:"pointer" }}>
                     <div style={{ fontSize:15, fontWeight:600, color:done?"#16A34A":"#111", textDecoration:done?"line-through":"none" }}>{r.title}</div>
                     <div style={{ display:"flex", gap:14, marginTop:2 }}><span style={{ fontSize:12, color:"#9CA3AF" }}>⏰ {r.time||"—"}</span><span style={{ fontSize:12, color:"#F59E0B", fontWeight:600 }}>🔥 {r.streak||0} gün</span></div>
                   </div>
                   <div style={{ display:"flex", gap:6, flexShrink:0 }}>
-                    <button onClick={() => { setEditR({...r}); navigate(SCREENS.EDIT); }} style={{ width:32, height:32, borderRadius:8, background:"#F3F4F6", border:"none", cursor:"pointer", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✏️</button>
-                    <button onClick={() => setDeleteConfirm(r.id)} style={{ width:32, height:32, borderRadius:8, background:"#FEF2F2", border:"none", cursor:"pointer", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>🗑️</button>
+                    <button onClick={() => { setEditR({...r}); navigate(SCREENS.EDIT); }} style={{ width:32, height:32, borderRadius:8, background:"#F3F4F6", border:"none", cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>✏️</button>
+                    <button onClick={() => setDeleteConfirm(r.id)} style={{ width:32, height:32, borderRadius:8, background:"#FEF2F2", border:"none", cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>🗑️</button>
                   </div>
                   <div onClick={() => toggle(r.id)} style={{ width:28, height:28, borderRadius:"50%", background:done?"#16A34A":"transparent", border:"2px solid " + (done?"#16A34A":"#D1D5DB"), display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer", transition:"all 0.2s" }}>
                     {done && <svg width="14" height="14" viewBox="0 0 14 14"><polyline points="2,7 5.5,10.5 12,3" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
@@ -687,9 +784,9 @@ export default function RutinOnline() {
           {EXAMPLE_ROUTINES.filter(ex => !routines.find(r => r.title===ex.title)).length > 0 && (
             <div style={{ marginTop:28 }}>
               <div style={{ fontSize:14, fontWeight:700, color:"#111", marginBottom:4 }}>💡 Rutin önerileri</div>
-              <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:14 }}>Bir tıkla rutinine ekle</div>
+              <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:14 }}>Bir tıkla ekle</div>
               <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                {EXAMPLE_ROUTINES.filter(ex => !routines.find(r => r.title===ex.title)).slice(0,5).map(ex => (
+                {EXAMPLE_ROUTINES.filter(ex => !routines.find(r => r.title===ex.title)).slice(0,4).map(ex => (
                   <div key={ex.title} style={{ ...S.card, display:"flex", alignItems:"center", gap:12, padding:"12px 16px", background:"#FAFAFA", border:"1px dashed #D1FAE5" }}>
                     <span style={{ fontSize:20 }}>{ex.emoji}</span>
                     <div style={{ flex:1 }}><div style={{ fontSize:14, color:"#374151" }}>{ex.title}</div><div style={{ fontSize:11, color:"#9CA3AF" }}>{ex.time}</div></div>
@@ -700,12 +797,14 @@ export default function RutinOnline() {
             </div>
           )}
           <div style={{ ...S.card, marginTop:20, display:"flex", justifyContent:"space-between", alignItems:"center", padding:"14px 18px" }}>
-            <div><div style={{ fontSize:12, color:"#9CA3AF" }}>Lisans bitiş tarihi</div><div style={{ fontSize:14, fontWeight:600, color:expiringSoon?"#DC2626":"#374151" }}>{license ? formatDate(license.expires_at || license.expiresAt) : "—"}</div></div>
+            <div><div style={{ fontSize:12, color:"#9CA3AF" }}>Lisans bitiş tarihi</div><div style={{ fontSize:14, fontWeight:600, color:expiringSoon?"#DC2626":"#374151" }}>{license ? formatDate(license.expires_at||license.expiresAt) : "—"}</div></div>
             <div style={{ fontSize:24, fontWeight:800, color:expiringSoon?"#DC2626":"#16A34A" }}>{remaining}g</div>
           </div>
         </div>
+
+        {/* Gün detay modalı */}
         {dayDetail && (
-          <div onClick={() => setDayDetail(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:100, padding:20 }}>
+          <div onClick={() => { setDayDetail(null); setSelectedDay(TODAY); }} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:100, padding:20 }}>
             <div onClick={e => e.stopPropagation()} style={{ ...S.card, width:"100%", maxWidth:480, padding:28, borderRadius:24, maxHeight:"80vh", overflowY:"auto" }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
                 <div>
@@ -716,40 +815,33 @@ export default function RutinOnline() {
                       : "Bu gün rutin tamamlanmadı"}
                   </div>
                 </div>
-                <button onClick={() => setDayDetail(null)} style={{ background:"#F3F4F6", border:"none", borderRadius:10, width:32, height:32, cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center", color:"#6B7280" }}>X</button>
+                <button onClick={() => { setDayDetail(null); setSelectedDay(TODAY); }} style={{ background:"#F3F4F6", border:"none", borderRadius:10, width:32, height:32, cursor:"pointer", fontSize:16 }}>X</button>
               </div>
-
-              {routines.length === 0 ? (
-                <div style={{ textAlign:"center", padding:"20px 0", color:"#9CA3AF", fontSize:14 }}>Henüz rutin eklenmemiş.</div>
-              ) : (
-                <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-                  {routines.map(r => {
-                    const done = completions.some(c => c.routine_id === r.id && c.completed_date === dayDetail.date);
-                    return (
-                      <div key={r.id} style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px", background:done?"#F0FDF4":"#F9FAFB", borderRadius:14, border:"1px solid " + (done?"#BBF7D0":"#E5E7EB"), opacity:done?1:0.5 }}>
-                        <div style={{ width:40, height:40, borderRadius:"50%", background:done?"#DCFCE7":"#F3F4F6", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{r.emoji}</div>
-                        <div style={{ flex:1 }}>
-                          <div style={{ fontSize:14, fontWeight:600, color:done?"#16A34A":"#9CA3AF", textDecoration:done?"none":"line-through" }}>{r.title}</div>
-                          <div style={{ fontSize:12, color:"#9CA3AF", marginTop:2 }}>{r.time || "—"}</div>
-                        </div>
-                        <div style={{ width:28, height:28, borderRadius:"50%", background:done?"#16A34A":"transparent", border:"2px solid " + (done?"#16A34A":"#D1D5DB"), display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                          {done && <svg width="14" height="14" viewBox="0 0 14 14"><polyline points="2,7 5.5,10.5 12,3" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                        </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                {routines.map(r => {
+                  const done = completions.some(c => c.routine_id === r.id && c.completed_date === dayDetail.date);
+                  return (
+                    <div key={r.id} style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px", background:done?"#F0FDF4":"#F9FAFB", borderRadius:14, border:"1px solid " + (done?"#BBF7D0":"#E5E7EB"), opacity:done?1:0.55 }}>
+                      <div style={{ width:40, height:40, borderRadius:"50%", background:done?"#DCFCE7":"#F3F4F6", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{r.emoji}</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:14, fontWeight:600, color:done?"#16A34A":"#9CA3AF", textDecoration:done?"none":"line-through" }}>{r.title}</div>
+                        <div style={{ fontSize:12, color:"#9CA3AF", marginTop:2 }}>{r.time||"—"}</div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-
+                      <div style={{ width:28, height:28, borderRadius:"50%", background:done?"#16A34A":"transparent", border:"2px solid " + (done?"#16A34A":"#D1D5DB"), display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                        {done && <svg width="14" height="14" viewBox="0 0 14 14"><polyline points="2,7 5.5,10.5 12,3" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
               {completions.filter(c => c.completed_date === dayDetail.date).length > 0 && (
                 <div style={{ marginTop:16, padding:"12px 16px", background:"#F0FDF4", borderRadius:12, textAlign:"center" }}>
-                  <div style={{ fontSize:13, color:"#16A34A", fontWeight:600 }}>
-                    {Math.round((completions.filter(c => c.completed_date === dayDetail.date).length / routines.length) * 100)}% başarı oranı
+                  <div style={{ fontSize:14, color:"#16A34A", fontWeight:700 }}>
+                    {routines.length ? Math.round((completions.filter(c => c.completed_date === dayDetail.date).length/routines.length)*100) : 0}% başarı oranı
                   </div>
                 </div>
               )}
-
-              <div style={{ marginTop:16, fontSize:12, color:"#D1D5DB", textAlign:"center" }}>Bu gün salt okunur modda görüntüleniyor</div>
+              <div style={{ marginTop:12, fontSize:12, color:"#D1D5DB", textAlign:"center" }}>Geçmiş günler salt okunur modda görüntülenir</div>
             </div>
           </div>
         )}
@@ -772,7 +864,7 @@ export default function RutinOnline() {
     );
   }
 
-  // ── RUTİN EKLE ───────────────────────────────────────────────
+  // RUTİN EKLE
   if (screen === SCREENS.ADD) return (
     <div style={S.app}>
       <AppNav showBack={true} showHome={true} title="Yeni Rutin" />
@@ -816,7 +908,7 @@ export default function RutinOnline() {
     </div>
   );
 
-  // ── RUTİN DÜZENLE ────────────────────────────────────────────
+  // RUTİN DÜZENLE
   if (screen === SCREENS.EDIT && editR) return (
     <div style={S.app}>
       <AppNav showBack={true} showHome={true} title="Rutini Düzenle" />
@@ -848,7 +940,7 @@ export default function RutinOnline() {
     </div>
   );
 
-  // ── İSTATİSTİKLER ─────────────────────────────────────────────
+  // İSTATİSTİKLER
   if (screen === SCREENS.STATS) {
     const funStats = calcFunStats(routines, completions);
     return (
@@ -856,7 +948,7 @@ export default function RutinOnline() {
         <AppNav showBack={true} showHome={true} title="İstatistikler" />
         <div style={{ maxWidth:480, margin:"0 auto", padding:"24px 20px" }}>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:20 }}>
-            {[["🔥","En uzun seri",Math.max(0,...routines.map(r=>r.streak||0)) + " gün"],["✅","Toplam rutin",routines.length + " adet"],["⭐","Bugün",todayCompleted + "/" + routines.length],["📅","Tamamlanan",completions.length + " gün"]].map(([e,l,v]) => (
+            {[["🔥","En uzun seri",Math.max(0,...routines.map(r=>r.streak||0)) + " gün"],["✅","Toplam rutin",routines.length + " adet"],["⭐","Bugün",todayCompleted + "/" + routines.length],["📅","Tamamlanan",completions.length + " kez"]].map(([e,l,v]) => (
               <div key={l} style={{ ...S.card, textAlign:"center" }}>
                 <div style={{ fontSize:28, marginBottom:6 }}>{e}</div>
                 <div style={{ fontSize:20, fontWeight:800, color:"#111", marginBottom:2 }}>{v}</div>
@@ -890,20 +982,10 @@ export default function RutinOnline() {
                 {funStats.map((s,i) => (
                   <div key={i} style={{ ...S.card, display:"flex", alignItems:"center", gap:16, padding:"16px 18px", borderLeft:"4px solid " + s.color }}>
                     <div style={{ fontSize:32, flexShrink:0 }}>{s.emoji}</div>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontSize:13, color:"#6B7280", marginBottom:2 }}>{s.label}</div>
-                      <div style={{ fontSize:20, fontWeight:800, color:s.color }}>{s.value}</div>
-                    </div>
+                    <div style={{ flex:1 }}><div style={{ fontSize:13, color:"#6B7280", marginBottom:2 }}>{s.label}</div><div style={{ fontSize:20, fontWeight:800, color:s.color }}>{s.value}</div></div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-          {funStats.length === 0 && routines.length > 0 && (
-            <div style={{ ...S.card, textAlign:"center", padding:"32px 24px" }}>
-              <div style={{ fontSize:40, marginBottom:12 }}>📊</div>
-              <div style={{ fontSize:15, fontWeight:700, color:"#111", marginBottom:8 }}>Henüz veri yok</div>
-              <div style={{ fontSize:13, color:"#9CA3AF", lineHeight:1.6 }}>Rutinlerini tamamlamaya başlayınca burada eğlenceli istatistikler göreceksin!</div>
             </div>
           )}
         </div>
@@ -911,7 +993,71 @@ export default function RutinOnline() {
     );
   }
 
-  // ── PROFİL ───────────────────────────────────────────────────
+  // HAFTALIK RAPOR
+  if (screen === SCREENS.WEEKLY) {
+    const report = weeklyReport();
+    return (
+      <div style={S.app}>
+        <AppNav showBack={true} showHome={true} title="Haftalık Rapor" />
+        <div style={{ maxWidth:480, margin:"0 auto", padding:"24px 20px" }}>
+          <div style={{ ...S.card, textAlign:"center", marginBottom:20, padding:"28px", background:"linear-gradient(135deg,#F0FDF4,#DCFCE7)", border:"1.5px solid #BBF7D0" }}>
+            <div style={{ fontSize:13, color:"#16A34A", fontWeight:600, letterSpacing:1, textTransform:"uppercase", marginBottom:12 }}>Bu Haftanın Özeti</div>
+            <div style={{ fontSize:64, fontWeight:900, color:"#16A34A", lineHeight:1 }}>{report.weekRate}%</div>
+            <div style={{ fontSize:15, color:"#6B7280", marginTop:8 }}>genel başarı oranı</div>
+            <div style={{ display:"flex", justifyContent:"center", gap:32, marginTop:20, paddingTop:20, borderTop:"1px solid #BBF7D0" }}>
+              <div style={{ textAlign:"center" }}><div style={{ fontSize:22, fontWeight:800, color:"#111" }}>{report.totalCompleted}</div><div style={{ fontSize:12, color:"#9CA3AF" }}>Tamamlanan</div></div>
+              <div style={{ textAlign:"center" }}><div style={{ fontSize:22, fontWeight:800, color:"#F59E0B" }}>{report.bestStreak}</div><div style={{ fontSize:12, color:"#9CA3AF" }}>En uzun seri</div></div>
+              <div style={{ textAlign:"center" }}><div style={{ fontSize:22, fontWeight:800, color:"#7C3AED" }}>{routines.length}</div><div style={{ fontSize:12, color:"#9CA3AF" }}>Aktif rutin</div></div>
+            </div>
+          </div>
+
+          <div style={{ ...S.card, marginBottom:20 }}>
+            <div style={{ fontSize:14, fontWeight:700, color:"#111", marginBottom:16 }}>Gün gün performans</div>
+            <div style={{ display:"flex", gap:8, alignItems:"flex-end", height:100, marginBottom:12 }}>
+              {report.days.map((d,i) => (
+                <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+                  <div style={{ fontSize:11, fontWeight:600, color:d.rate>0?"#16A34A":"#9CA3AF" }}>{d.rate > 0 ? d.rate + "%" : ""}</div>
+                  <div style={{ width:"100%", height:Math.max(6, d.rate * 0.7) + "px", background:d.isToday?"#16A34A":d.rate > 0?"#BBF7D0":"#F3F4F6", borderRadius:6, transition:"height 0.3s" }} />
+                  <div style={{ fontSize:11, color:d.isToday?"#16A34A":"#9CA3AF", fontWeight:d.isToday?700:400 }}>{d.day}</div>
+                  <div style={{ fontSize:10, color:"#D1D5DB" }}>{d.date}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ ...S.card, marginBottom:20 }}>
+            <div style={{ fontSize:14, fontWeight:700, color:"#111", marginBottom:14 }}>Günlük detay</div>
+            {report.days.map((d,i) => (
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:12, paddingBottom:12, marginBottom:12, borderBottom:i<6?"1px solid #F3F4F6":"none" }}>
+                <div style={{ width:36, height:36, borderRadius:10, background:d.isToday?"#16A34A":d.count>0?"#DCFCE7":"#F9FAFB", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <span style={{ fontSize:13, fontWeight:700, color:d.isToday?"white":d.count>0?"#16A34A":"#9CA3AF" }}>{d.date}</span>
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:d.isToday?"#16A34A":"#374151" }}>{d.day}{d.isToday?" (Bugün)":""}</div>
+                  <div style={{ fontSize:12, color:"#9CA3AF" }}>
+                    {d.count === 0 ? "Tamamlanan rutin yok" : d.count + "/" + d.total + " rutin tamamlandı"}
+                  </div>
+                </div>
+                <div style={{ fontSize:14, fontWeight:700, color:d.rate>=80?"#16A34A":d.rate>=50?"#F59E0B":"#9CA3AF" }}>
+                  {d.rate > 0 ? d.rate + "%" : "—"}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {report.weekRate === 100 && (
+            <div style={{ ...S.card, background:"linear-gradient(135deg,#16A34A,#4ADE80)", textAlign:"center", padding:"24px" }}>
+              <div style={{ fontSize:36, marginBottom:8 }}>🏆</div>
+              <div style={{ fontSize:18, fontWeight:800, color:"white" }}>Mükemmel hafta!</div>
+              <div style={{ fontSize:14, color:"rgba(255,255,255,0.85)", marginTop:4 }}>Tüm rutinlerini eksiksiz tamamladın.</div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // PROFİL
   if (screen === SCREENS.PROFILE) return (
     <div style={S.app}>
       <AppNav showBack={true} showHome={true} title="Profilim" />
@@ -928,42 +1074,32 @@ export default function RutinOnline() {
             <div style={{ textAlign:"center" }}><div style={{ fontSize:22, fontWeight:800, color:"#7C3AED" }}>{completions.length}</div><div style={{ fontSize:12, color:"#9CA3AF" }}>Tamamlanan</div></div>
           </div>
         </div>
-
         <div style={{ ...S.card, marginBottom:20 }}>
           <div style={{ fontSize:15, fontWeight:700, color:"#111", marginBottom:16 }}>Kişisel Bilgiler</div>
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>AD SOYAD</div>
-            <input value={profileForm.fullName} onChange={e => setProfileForm(p => ({ ...p, fullName:e.target.value }))} style={S.input} placeholder="Adın ve soyadın" />
+            <input value={profileForm.fullName} onChange={e => setProfileForm(p => ({ ...p,fullName:e.target.value }))} style={S.input} placeholder="Adın ve soyadın" />
           </div>
           <div style={{ marginBottom:16 }}>
             <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>E-POSTA</div>
             <input value={user?.email} disabled style={{ ...S.input, background:"#F9FAFB", color:"#9CA3AF", cursor:"not-allowed" }} />
             <div style={{ fontSize:11, color:"#9CA3AF", marginTop:4 }}>E-posta değiştirilemez</div>
           </div>
-
           <div style={{ borderTop:"1px solid #E8F5E9", paddingTop:16, marginBottom:16 }}>
             <div style={{ fontSize:15, fontWeight:700, color:"#111", marginBottom:4 }}>Şifre Değiştir</div>
-            <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:16 }}>Şifreni değiştirmek istemiyorsan bu alanları boş bırak</div>
+            <div style={{ fontSize:12, color:"#9CA3AF", marginBottom:16 }}>Değiştirmek istemiyorsan boş bırak</div>
             {[["MEVCUT ŞİFRE","currentPass","Mevcut şifren"],["YENİ ŞİFRE","newPass","En az 6 karakter"],["YENİ ŞİFRE TEKRAR","confirmPass","Yeni şifreni tekrar gir"]].map(([label,key,ph]) => (
-              <div key={key} style={{ marginBottom:12 }}>
-                <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:6 }}>{label}</div>
-                <input type="password" placeholder={ph} value={profileForm[key]} onChange={e => setProfileForm(p => ({ ...p,[key]:e.target.value }))} style={S.input} />
-              </div>
+              <div key={key} style={{ marginBottom:12 }}><div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:6 }}>{label}</div><input type="password" placeholder={ph} value={profileForm[key]} onChange={e => setProfileForm(p => ({ ...p,[key]:e.target.value }))} style={S.input} /></div>
             ))}
           </div>
-
           {profileMsg.text && (
-            <div style={{ background:profileMsg.ok?"#F0FDF4":"#FEF2F2", border:"1px solid " + (profileMsg.ok?"#BBF7D0":"#FECACA"), borderRadius:10, padding:"10px 14px", fontSize:13, color:profileMsg.ok?"#16A34A":"#DC2626", marginBottom:16, textAlign:"center" }}>
-              {profileMsg.text}
-            </div>
+            <div style={{ background:profileMsg.ok?"#F0FDF4":"#FEF2F2", border:"1px solid " + (profileMsg.ok?"#BBF7D0":"#FECACA"), borderRadius:10, padding:"10px 14px", fontSize:13, color:profileMsg.ok?"#16A34A":"#DC2626", marginBottom:16, textAlign:"center" }}>{profileMsg.text}</div>
           )}
-
           <button onClick={handleProfileSave} style={{ ...S.btn(), width:"100%", borderRadius:12, padding:"14px", fontSize:15 }}>Kaydet</button>
         </div>
-
         <div style={{ ...S.card, border:"1px solid #FEE2E2" }}>
           <div style={{ fontSize:14, fontWeight:700, color:"#111", marginBottom:4 }}>Lisans Bilgisi</div>
-          <div style={{ fontSize:13, color:"#9CA3AF", marginBottom:12 }}>Bitiş: {license ? formatDate(license.expires_at || license.expiresAt) : "—"}</div>
+          <div style={{ fontSize:13, color:"#9CA3AF", marginBottom:12 }}>Bitiş: {license ? formatDate(license.expires_at||license.expiresAt) : "—"}</div>
           <button onClick={() => window.open("https://wa.me/" + CONTACT_WHATSAPP + "?text=Lisansimi yenilemek istiyorum.","_blank")} style={{ ...S.btn("#25D366"), width:"100%", borderRadius:12, padding:"12px", fontSize:14 }}>💬 Lisansı Yenile</button>
         </div>
       </div>
