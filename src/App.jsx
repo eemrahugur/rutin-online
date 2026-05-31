@@ -1,3 +1,4 @@
+// rutin.online v8.3 - saat araligi + bildirim sistemi
 import { useState, useEffect, useRef, useCallback } from "react";
 
 const SUPABASE_URL = "https://yzziswewoagxmbknthwo.supabase.co";
@@ -280,12 +281,23 @@ export default function RutinOnline() {
 
   const requestNotifications = async () => {
     if (!("Notification" in window)) { showToast("Tarayıcın bildirim desteklemiyor.", "#EF4444"); return; }
+    // Eğer daha önce reddedildiyse doğrudan uyar
+    if (Notification.permission === "denied") {
+      showToast("Tarayıcı adres çubuğundaki kilit ikonuna tıkla ve bildirimlere izin ver.", "#EF4444");
+      return;
+    }
     const perm = await Notification.requestPermission();
     setNotifPermission(perm);
     if (perm === "granted") {
-      showToast("Bildirimler açıldı! Rutinlerin için hatırlatıcılar kuruldu.");
+      // Test bildirimi gönder
+      new Notification("rutin.online ✅", {
+        body: "Bildirimler açıldı! Rutinlerin için hatırlatıcılar kuruldu.",
+        icon: "/icon-192.png"
+      });
       setTimeout(() => sendAlarmsToSW(routines, completions), 500);
-    } else { showToast("Bildirim izni reddedildi.", "#F59E0B"); }
+    } else {
+      showToast("Bildirim izni verilmedi. Tarayıcı ayarlarından açabilirsin.", "#F59E0B");
+    }
   };
 
   const sendAlarmsToSW = useCallback((rList, cList) => {
@@ -789,10 +801,26 @@ export default function RutinOnline() {
             <button onClick={() => window.open("https://wa.me/" + CONTACT_WHATSAPP + "?text=Lisansimi yenilemek istiyorum.","_blank")} style={{ ...S.btn(remaining<=7?"#DC2626":"#D97706"), padding:"6px 14px", fontSize:12, borderRadius:8 }}>Yenile</button>
           </div>
         )}
-        {notifPermission === "default" && routines.length > 0 && (
-          <div style={{ background:"#EFF6FF", borderBottom:"1px solid #BFDBFE", padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={{ fontSize:13, color:"#1D4ED8" }}>🔔 Rutin hatırlatıcılarını aç</div>
-            <button onClick={requestNotifications} style={{ ...S.btn("#2563EB"), padding:"6px 14px", fontSize:12, borderRadius:8 }}>İzin Ver</button>
+        {notifPermission !== "granted" && routines.length > 0 && (
+          <div style={{ background: notifPermission === "denied" ? "#FEF2F2" : "#EFF6FF", borderBottom:"1px solid " + (notifPermission === "denied" ? "#FECACA" : "#BFDBFE"), padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontSize:13, color: notifPermission === "denied" ? "#DC2626" : "#1D4ED8" }}>
+              {notifPermission === "denied"
+                ? "🔕 Bildirimler kapalı — tarayıcı ayarlarından aç"
+                : "🔔 Rutin hatırlatıcıları için bildirim iznini ver"}
+            </div>
+            {notifPermission !== "denied" && (
+              <button onClick={requestNotifications} style={{ ...S.btn("#2563EB"), padding:"6px 14px", fontSize:12, borderRadius:8 }}>İzin Ver</button>
+            )}
+            {notifPermission === "denied" && (
+              <button onClick={() => {
+                if (/iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase())) {
+                  showToast("iPhone: Ayarlar > Safari > Bildirimler > rutin.online", "#374151");
+                } else {
+                  window.open("chrome://settings/content/notifications", "_blank");
+                  showToast("Tarayıcı adres çubuğundaki kilit ikonuna tıkla → Bildirimler → İzin Ver", "#374151");
+                }
+              }} style={{ ...S.btn("#EF4444"), padding:"6px 14px", fontSize:12, borderRadius:8 }}>Nasıl Açılır?</button>
+            )}
           </div>
         )}
         <div style={{ maxWidth:520, margin:"0 auto", padding:"20px 18px" }}>
