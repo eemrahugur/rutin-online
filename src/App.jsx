@@ -47,6 +47,68 @@ const VALID_LICENSES = {
   "RUTIN-TEST-9999": { name:"Test Kullanıcı", expiresAt: new Date(Date.now() - 1000) },
 };
 
+// Saat seçenekleri (05:00 - 23:30, 30 dakika aralıklı)
+const TIME_SLOTS = ["05:00","05:30","06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00","22:30","23:00","23:30"];
+
+// Saat aralığını parse et
+function parseTimeRange(t) {
+  if (!t || t === "all_day" || t === "Gün boyu") return { allDay:true, start:"", end:"" };
+  if (t.includes("-")) {
+    const parts = t.split("-");
+    return { allDay:false, start:parts[0].trim(), end:parts[1].trim() };
+  }
+  return { allDay:false, start:t, end:"" };
+}
+
+// Saat aralığını göster
+function displayTime(t) {
+  if (!t || t === "all_day" || t === "Gün boyu") return "Tüm Gün";
+  if (t.includes("-")) return t.replace("-", " - ");
+  return t;
+}
+
+// Bildirimleri planla
+function buildAlarms(routines, completedIds, date) {
+  const alarms = [];
+  const now = Date.now();
+  const todayStr = date;
+  
+  routines.forEach(r => {
+    if (completedIds.includes(r.id)) return;
+    const { allDay, start, end } = parseTimeRange(r.time);
+    const tag = "rutin-" + r.id;
+    const body = r.emoji + " " + r.title + " — henüz tamamlanmadı!";
+    
+    if (allDay) {
+      // Tüm gün: saat 10, 13, 17, 20'de bildirim
+      // Sessiz saat: 22:00 sonrası bildirim yok
+    [10, 13, 17, 20].forEach(h => {
+        const target = new Date(todayStr + "T" + String(h).padStart(2,"0") + ":00:00");
+        if (target.getTime() > now) {
+          alarms.push({ routineId:r.id, fireAt:target.getTime(), repeatMs:2*60*60*1000, body, tag });
+        }
+      });
+    } else if (end) {
+      // Bitiş saatinden sonra her 1 saatte bir
+      const endTime = new Date(todayStr + "T" + end + ":00");
+      if (endTime.getTime() > now) {
+        // İlk bildirim bitiş saatinde
+        alarms.push({ routineId:r.id, fireAt:endTime.getTime(), repeatMs:60*60*1000, body, tag });
+      } else if (endTime.getTime() <= now) {
+        // Bitiş saati geçmiş, hemen + her saat
+        alarms.push({ routineId:r.id, fireAt:now + 5000, repeatMs:60*60*1000, body, tag });
+      }
+    } else if (start) {
+      const startTime = new Date(todayStr + "T" + start + ":00");
+      if (startTime.getTime() > now) {
+        alarms.push({ routineId:r.id, fireAt:startTime.getTime(), repeatMs:60*60*1000, body, tag });
+      }
+    }
+  });
+  return alarms;
+}
+
+
 const Logo = ({ size=28, textSize=22, dotSize=13, color="#16A34A", light="#86EFAC" }) => (
   <div style={{ display:"flex", alignItems:"center", gap:10 }}>
     <svg width={size} height={size} viewBox="0 0 48 48">
@@ -152,7 +214,7 @@ export default function RutinOnline() {
   const [toast, setToast] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [editR, setEditR] = useState(null);
-  const [newR, setNewR] = useState({ title:"", emoji:"⭐", time:"", category:"spor" });
+  const [newR, setNewR] = useState({ title:"", emoji:"⭐", allDay:false, startTime:"07:00", endTime:"08:00", category:"spor" });
   const [licenseInput, setLicenseInput] = useState("");
   const [regForm, setRegForm] = useState({ fullName:"", email:"", password:"", confirmPassword:"" });
   const [loginForm, setLoginForm] = useState({ email:"", password:"" });
@@ -221,20 +283,34 @@ export default function RutinOnline() {
     const perm = await Notification.requestPermission();
     setNotifPermission(perm);
     if (perm === "granted") {
-      showToast("Bildirimler açıldı!");
-      scheduleNotifications();
+      showToast("Bildirimler açıldı! Rutinlerin için hatırlatıcılar kuruldu.");
+      setTimeout(() => sendAlarmsToSW(routines, completions), 500);
     } else { showToast("Bildirim izni reddedildi.", "#F59E0B"); }
   };
 
-  const scheduleNotifications = useCallback(() => {
-    if ("serviceWorker" in navigator && Notification.permission === "granted") {
-      navigator.serviceWorker.ready.then(sw => {
-        sw.active?.postMessage({ type:"SCHEDULE_REMINDERS", reminders:routines.filter(r => r.time && r.time !== "Gün boyu") });
-      });
-    }
-  }, [routines]);
+  const sendAlarmsToSW = useCallback((rList, cList) => {
+    if (!("serviceWorker" in navigator) || Notification.permission !== "granted") return;
+    const today = todayDate();
+    const completedIds = rList.filter(r => cList.some(c => c.routine_id === r.id && c.completed_date === today)).map(r => r.id);
+    const alarms = buildAlarms(rList, completedIds, today);
+    navigator.serviceWorker.ready.then(reg => {
+      reg.active?.postMessage({ type:"SET_ALARMS", alarms });
+    });
+  }, []);
 
-  useEffect(() => { if (routines.length > 0 && Notification.permission === "granted") scheduleNotifications(); }, [routines, scheduleNotifications]);
+  // Tamamlanınca o rutinin alarmlarını iptal et
+  const cancelRoutineAlarms = useCallback((routineId) => {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.ready.then(reg => {
+      reg.active?.postMessage({ type:"CLEAR_ROUTINE_ALARMS", routineId });
+    });
+  }, []);
+
+  useEffect(() => {
+    if (routines.length > 0 && Notification.permission === "granted") {
+      sendAlarmsToSW(routines, completions);
+    }
+  }, [routines, completions, sendAlarmsToSW]);
 
   const loadRoutines = async () => {
     try { const data = await api("routines?user_id=eq." + user.id + "&order=created_at.asc"); setRoutines(data || []); } catch(e) { console.error(e); }
@@ -330,11 +406,13 @@ export default function RutinOnline() {
         const newStreak = Math.max(0,(routine?.streak||1)-1);
         await api("routines?id=eq." + routineId, { method:"PATCH", body:JSON.stringify({ streak:newStreak }) });
         setRoutines(p => p.map(r => r.id === routineId ? { ...r, streak:newStreak } : r));
+        // Tamamlamayı geri aldıysa alarm tekrar kur
+        sendAlarmsToSW(routines, completions.filter(c => c.id !== existing.id));
       } else {
         const data = await api("completions", { method:"POST", body:JSON.stringify({ routine_id:routineId, completed_date:date }) });
         const added = Array.isArray(data) ? data[0] : data;
+        cancelRoutineAlarms(routineId);
         setCompletions(p => { const newComps = [...p, added];
-          // Hepsi tamamlandı mı kontrol et
           const todayDone = routines.filter(r => newComps.some(c => c.routine_id === r.id && c.completed_date === date)).length;
           if (todayDone === routines.length && routines.length > 0) {
             setKonfeti(true); setTimeout(() => setKonfeti(false), 3500);
@@ -350,10 +428,15 @@ export default function RutinOnline() {
   };
 
   const addRoutine = async (preset=null) => {
-    const r = preset || newR;
+    let r = preset || newR;
     if (!r.title.trim()) return;
+    // Build time string
+    let timeStr = r.time;
+    if (!preset) {
+      timeStr = r.allDay ? "all_day" : (r.startTime && r.endTime ? r.startTime + "-" + r.endTime : r.startTime || "");
+    }
     try {
-      const data = await api("routines", { method:"POST", body:JSON.stringify({ user_id:user.id, title:r.title, emoji:r.emoji, time:r.time, category:r.category }) });
+      const data = await api("routines", { method:"POST", body:JSON.stringify({ user_id:user.id, title:r.title, emoji:r.emoji, time:timeStr, category:r.category }) });
       const added = Array.isArray(data) ? data[0] : data;
       setRoutines(p => [...p, added]);
       if (!preset) { setNewR({ title:"", emoji:"⭐", time:"", category:"spor" }); setScreen(SCREENS.DASHBOARD); }
@@ -363,8 +446,9 @@ export default function RutinOnline() {
 
   const saveEdit = async () => {
     if (!editR?.title.trim()) return;
+    const timeStr = editR.allDay ? "all_day" : (editR.startTime && editR.endTime ? editR.startTime + "-" + editR.endTime : editR.startTime || "");
     try {
-      await api("routines?id=eq." + editR.id, { method:"PATCH", body:JSON.stringify({ title:editR.title, emoji:editR.emoji, time:editR.time, category:editR.category }) });
+      await api("routines?id=eq." + editR.id, { method:"PATCH", body:JSON.stringify({ title:editR.title, emoji:editR.emoji, time:timeStr, category:editR.category }) });
       setRoutines(p => p.map(r => r.id === editR.id ? { ...r, ...editR } : r));
       showToast("Rutin güncellendi"); setEditR(null); setScreen(SCREENS.DASHBOARD);
     } catch(e) { showToast("Güncellenemedi.", "#EF4444"); }
@@ -768,10 +852,12 @@ export default function RutinOnline() {
                   <div onClick={() => toggle(r.id)} style={{ width:44, height:44, borderRadius:"50%", background:done?"#DCFCE7":"#F9FAFB", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0, cursor:"pointer" }}>{r.emoji}</div>
                   <div onClick={() => toggle(r.id)} style={{ flex:1, cursor:"pointer" }}>
                     <div style={{ fontSize:15, fontWeight:600, color:done?"#16A34A":"#111", textDecoration:done?"line-through":"none" }}>{r.title}</div>
-                    <div style={{ display:"flex", gap:14, marginTop:2 }}><span style={{ fontSize:12, color:"#9CA3AF" }}>⏰ {r.time||"—"}</span><span style={{ fontSize:12, color:"#F59E0B", fontWeight:600 }}>🔥 {r.streak||0} gün</span></div>
+                    <div style={{ display:"flex", gap:14, marginTop:2 }}><span style={{ fontSize:12, color:"#9CA3AF" }}>⏰ {displayTime(r.time)}</span><span style={{ fontSize:12, color:"#F59E0B", fontWeight:600 }}>🔥 {r.streak||0} gün</span></div>
                   </div>
                   <div style={{ display:"flex", gap:6, flexShrink:0 }}>
-                    <button onClick={() => { setEditR({...r}); navigate(SCREENS.EDIT); }} style={{ width:32, height:32, borderRadius:8, background:"#F3F4F6", border:"none", cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>✏️</button>
+                    <button onClick={() => { const parsed = parseTimeRange(r.time);
+              setEditR({ ...r, allDay:parsed.allDay, startTime:parsed.start||"07:00", endTime:parsed.end||"08:00" });
+              navigate(SCREENS.EDIT); }} style={{ width:32, height:32, borderRadius:8, background:"#F3F4F6", border:"none", cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>✏️</button>
                     <button onClick={() => setDeleteConfirm(r.id)} style={{ width:32, height:32, borderRadius:8, background:"#FEF2F2", border:"none", cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>🗑️</button>
                   </div>
                   <div onClick={() => toggle(r.id)} style={{ width:28, height:28, borderRadius:"50%", background:done?"#16A34A":"transparent", border:"2px solid " + (done?"#16A34A":"#D1D5DB"), display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer", transition:"all 0.2s" }}>
@@ -825,7 +911,7 @@ export default function RutinOnline() {
                       <div style={{ width:40, height:40, borderRadius:"50%", background:done?"#DCFCE7":"#F3F4F6", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{r.emoji}</div>
                       <div style={{ flex:1 }}>
                         <div style={{ fontSize:14, fontWeight:600, color:done?"#16A34A":"#9CA3AF", textDecoration:done?"none":"line-through" }}>{r.title}</div>
-                        <div style={{ fontSize:12, color:"#9CA3AF", marginTop:2 }}>{r.time||"—"}</div>
+                        <div style={{ fontSize:12, color:"#9CA3AF", marginTop:2 }}>{displayTime(r.time)}</div>
                       </div>
                       <div style={{ width:28, height:28, borderRadius:"50%", background:done?"#16A34A":"transparent", border:"2px solid " + (done?"#16A34A":"#D1D5DB"), display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                         {done && <svg width="14" height="14" viewBox="0 0 14 14"><polyline points="2,7 5.5,10.5 12,3" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
@@ -891,9 +977,40 @@ export default function RutinOnline() {
               ))}
             </div>
           </div>
-          {[["RUTİN ADI","title","text","Örn: Her sabah 10 dk yürü"],["SAAT","time","text","Örn: 07:00"]].map(([label,key,type,ph]) => (
-            <div key={key} style={{ marginBottom:14 }}><div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>{label}</div><input type={type} placeholder={ph} value={newR[key]} onChange={e => setNewR(p => ({ ...p,[key]:e.target.value }))} style={S.input} /></div>
-          ))}
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>RUTİN ADI</div>
+            <input type="text" placeholder="Örn: Her sabah 10 dk yürü" value={newR.title} onChange={e => setNewR(p => ({ ...p, title:e.target.value }))} style={S.input} />
+          </div>
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>SAAT ARALIĞI</div>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+              <div onClick={() => setNewR(p => ({ ...p, allDay:!p.allDay }))} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", background:newR.allDay?"#DCFCE7":"#F9FAFB", border:"1.5px solid " + (newR.allDay?"#16A34A":"#E5E7EB"), borderRadius:10, padding:"8px 14px" }}>
+                <div style={{ width:18, height:18, borderRadius:4, background:newR.allDay?"#16A34A":"transparent", border:"2px solid " + (newR.allDay?"#16A34A":"#D1D5DB"), display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  {newR.allDay && <svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1,5 4,8 9,2" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </div>
+                <span style={{ fontSize:13, fontWeight:600, color:newR.allDay?"#16A34A":"#6B7280" }}>Tüm Gün</span>
+              </div>
+              <div style={{ fontSize:12, color:"#9CA3AF" }}>— 2 saatte bir hatırlatır</div>
+            </div>
+            {!newR.allDay && (
+              <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:11, color:"#9CA3AF", marginBottom:4 }}>Başlangıç</div>
+                  <select value={newR.startTime} onChange={e => setNewR(p => ({ ...p, startTime:e.target.value }))} style={{ ...S.input, padding:"10px 12px", fontSize:14, cursor:"pointer" }}>
+                    {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div style={{ fontSize:18, color:"#9CA3AF", marginTop:16 }}>—</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:11, color:"#9CA3AF", marginBottom:4 }}>Bitiş</div>
+                  <select value={newR.endTime} onChange={e => setNewR(p => ({ ...p, endTime:e.target.value }))} style={{ ...S.input, padding:"10px 12px", fontSize:14, cursor:"pointer" }}>
+                    {TIME_SLOTS.filter(t => t > newR.startTime).map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+            {!newR.allDay && <div style={{ fontSize:12, color:"#9CA3AF", marginTop:8 }}>Bitiş saatinden sonra tamamlanmadıysa her 1 saatte bildirim alırsın</div>}
+          </div>
           <div style={{ marginBottom:20 }}>
             <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>KATEGORİ</div>
             <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -921,9 +1038,40 @@ export default function RutinOnline() {
             ))}
           </div>
         </div>
-        {[["RUTİN ADI","title","text","Rutin adı"],["SAAT","time","text","Örn: 07:00"]].map(([label,key,type,ph]) => (
-          <div key={key} style={{ marginBottom:14 }}><div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>{label}</div><input type={type} placeholder={ph} value={editR[key]||""} onChange={e => setEditR(p => ({ ...p,[key]:e.target.value }))} style={S.input} /></div>
-        ))}
+        <div style={{ marginBottom:14 }}>
+          <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>RUTİN ADI</div>
+          <input type="text" placeholder="Rutin adı" value={editR.title||""} onChange={e => setEditR(p => ({ ...p, title:e.target.value }))} style={S.input} />
+        </div>
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>SAAT ARALIĞI</div>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+              <div onClick={() => setEditR(p => ({ ...p, allDay:!p.allDay }))} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", background:editR.allDay?"#DCFCE7":"#F9FAFB", border:"1.5px solid " + (editR.allDay?"#16A34A":"#E5E7EB"), borderRadius:10, padding:"8px 14px" }}>
+                <div style={{ width:18, height:18, borderRadius:4, background:editR.allDay?"#16A34A":"transparent", border:"2px solid " + (editR.allDay?"#16A34A":"#D1D5DB"), display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  {editR.allDay && <svg width="10" height="10" viewBox="0 0 10 10"><polyline points="1,5 4,8 9,2" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </div>
+                <span style={{ fontSize:13, fontWeight:600, color:editR.allDay?"#16A34A":"#6B7280" }}>Tüm Gün</span>
+              </div>
+              <div style={{ fontSize:12, color:"#9CA3AF" }}>— 2 saatte bir hatırlatır</div>
+            </div>
+            {!editR.allDay && (
+              <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:11, color:"#9CA3AF", marginBottom:4 }}>Başlangıç</div>
+                  <select value={editR.startTime||"07:00"} onChange={e => setEditR(p => ({ ...p, startTime:e.target.value }))} style={{ ...S.input, padding:"10px 12px", fontSize:14, cursor:"pointer" }}>
+                    {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div style={{ fontSize:18, color:"#9CA3AF", marginTop:16 }}>—</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:11, color:"#9CA3AF", marginBottom:4 }}>Bitiş</div>
+                  <select value={editR.endTime||"08:00"} onChange={e => setEditR(p => ({ ...p, endTime:e.target.value }))} style={{ ...S.input, padding:"10px 12px", fontSize:14, cursor:"pointer" }}>
+                    {TIME_SLOTS.filter(t => t > (editR.startTime||"07:00")).map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+            {!editR.allDay && <div style={{ fontSize:12, color:"#9CA3AF", marginTop:8 }}>Bitiş saatinden sonra tamamlanmadıysa her 1 saatte bildirim alırsın</div>}
+          </div>
         <div style={{ marginBottom:24 }}>
           <div style={{ fontSize:12, color:"#6B7280", fontWeight:500, marginBottom:8 }}>KATEGORİ</div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
